@@ -1,0 +1,4 @@
+killall -q Python
+killall -q node
+node server/main.js 2026 2026 http &
+python python/screen_anchor_server.py &

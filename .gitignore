@@ -1,0 +1,11 @@
+node_modules
+*.DS_Store
+**/.DS_Store
+*.pem
+*.json
+key.key
+cert.cer
+.env
+
+!package.json
+!package-lock.json
