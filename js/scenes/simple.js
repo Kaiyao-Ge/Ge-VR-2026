@@ -1,9 +1,6 @@
-/*****************************************************************
-
-   This is the simplest "hello world" example:
-   creating a single cube.
-
-*****************************************************************/
+/*
+   This is a simple "hello world" example: A rotating cube.
+*/
 
 export const init = async model => {
    let cube = model.add('cube');
