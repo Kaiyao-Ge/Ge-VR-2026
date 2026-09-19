@@ -1,11 +1,33 @@
-node_modules
-*.DS_Store
-**/.DS_Store
-*.pem
-*.json
-key.key
-cert.cer
-.env
+# Node.js dependencies and diagnostics
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-!package.json
-!package-lock.json
+# Python environments, caches, and test output
+.venv/
+.uv-cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+coverage/
+htmlcov/
+
+# Generated model output
+runs/
+
+# Local environment and TLS credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cer
+
+# Local runtime state
+clientDataMessages.json
+screenAnchorConfig.json
+ballInfo.json
+
+# Operating-system files
+.DS_Store

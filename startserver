@@ -1,4 +1,10 @@
-killall -q Python
-killall -q node
+#!/usr/bin/env bash
+set -e
+
+source "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+nvm use 18 >/dev/null
+
+killall -q python || true
+killall -q node || true
 node server/main.js 2026 2026 http &
-python python/screen_anchor_server.py &
+.venv/bin/python python/screen_anchor_server.py &
