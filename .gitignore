@@ -28,6 +28,7 @@ runs/
 clientDataMessages.json
 screenAnchorConfig.json
 ballInfo.json
+solarSystemState.json
 
 # Operating-system files
 .DS_Store

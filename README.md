@@ -1,4 +1,23 @@
-# VR-2026-Spring
+# Ge-VR-2026
+
+Kaiyao Ge's coursework fork of the [class repository](https://github.com/futurerealitylab/VR-2026-Fall). Each homework assignment has its own branch; this branch is `hw1`.
+
+## HW1 — A Handful of Time
+
+An interactive solar-system sandbox: use a controller beam to turn any planet and advance or reverse one shared clock for all eight planets. Controller haptics, multiplayer turn-taking, and an animated Earth–Moon hierarchy combine with one-hand movement and two-hand scaling to turn a tabletop model into an immersive star map.
+
+- [Project description, controls, and verification](doc/hw1.md)
+- [Scene source](js/scenes/solarSystem.js) · [Regression tests](tests/solar-system.test.cjs)
+- [HW1 submission branch](https://github.com/Kaiyao-Ge/Ge-VR-2026/tree/hw1)
+- [Ready-to-use BrightSpace description](doc/hw1.md#brightspace-submission)
+
+Use Node 18 and the setup instructions below, then follow the [HW1 launch instructions](doc/hw1.md#running-the-scene). Select `solarSystem` in the scene list and enter an immersive WebXR session with controllers. Desktop viewing is a preview, not the interactive headset experience.
+
+## Original course documentation
+
+The instructions below are retained from the course repository. Browser flags and menu names may differ on your headset; use your working WebXR access configuration for HW1.
+
+### VR-2026-Spring
 
 Software for CSCI-GA.3033-​097 Virtual Reality 2026 Spring.
 
