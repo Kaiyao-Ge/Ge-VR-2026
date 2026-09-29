@@ -1,55 +1,65 @@
-# VR-2026-Spring
+# Ge-VR-2026
 
-Software for CSCI-GA.3033-​097 Virtual Reality 2026 Spring.
+Coursework for CSCI-GA.3033-097 Virtual Reality, Fall 2026, based on the [class repository](https://github.com/futurerealitylab/VR-2026-Fall).
 
-# How to setup the environment
+## HW2: Spellcode
 
-install Node.js and npm if you haven't. This project was tested using **Node v18.20.8**; if you run into issues, we recommend switching to this version.
-Then in the command line, do
+Spellcode is a cooperative VR game. One player defends a core with two guns;
+the other collects code blocks and uses loops and weapon modifiers to change
+how the guns fire. In-game text explains the controls, shows status and score,
+and announces victory or defeat. Select **spellcode** to play, or choose
+**SOLO DEBUG** to test both roles with one headset or a mouse.
+See the [game instructions and checks](doc/spellcode.md).
+
+## Set up the environment
+
+Install Node.js and npm. This project uses Node v18.20.8. From the repository root, run:
+
 ```sh
 npm install
 cd server
 npm install
 source patch
 ```
-If source patch does not work, try
+
+If `source patch` fails, try:
+
 ```sh
 sh patch_fixed.sh
 ```
 
-# How to run on your local computer
+## Run on your computer
 
-1. At the root folder, do ``./startserver``
-2. Go to chrome://flags/ in your Google Chrome browser
-3. Search: ***"Insecure origins treated as secure"*** and enable the flag
-4. Add http://[your-computer's-ip-address]:2026 to the text box. For example http://10.19.127.1:2026
-5. Relaunch the chrome browser on your computer and go to http://localhost:2026
+1. From the repository root, run `./startserver`.
+2. Open chrome://flags/ in Chrome.
+3. Enable `Insecure origins treated as secure`.
+4. Add your server address, such as `http://10.19.127.1:2026`, to the flag's text box.
+5. Relaunch Chrome and open http://localhost:2026.
 
-# How to run in VR
+## Run in VR
 
-1. Run the program locally on your computer
-2. Open the browser on your VR headset
-3. Go to chrome://flags/
-4. Search: ***"Insecure origins treated as secure"*** and enable the flag
-5. Add http://[your-computer's-ip-address]:2026 to the text box. For example http://10.19.127.1:2026
-7. Relaunch the browser on your VR headset and go to http://[your-computer's-ip-address]:2026 
+1. Start the server on your computer.
+2. Open the browser on your VR headset.
+3. Go to chrome://flags/.
+4. Enable `Insecure origins treated as secure`.
+5. Add your computer's server address, such as `http://10.19.127.1:2026`, to the flag's text box.
+6. Relaunch the headset browser and open that address.
 
-# How to debug in VR
+## Debug in VR
 
 1. On your Oculus app, go to *Devices*, select your headset from the device list, and wait for it to connect. Then select *Developer Mode* and turn on *Developer Mode*.
-2. Connect your quest with your computer using your Oculus Quest cable.
-3. Go to chrome://inspect#devices on your computer
-4. Go to your VR headset and accept *Allow USB Debugging* when prompted on the headset
-5. On the chrome://inspect#devices on your computer, you should be able to see your device under the *Remote Target* and its active programs. You can then inspect the *VR-2026-Spring* window on your computer.
+2. Connect your Quest to your computer with a USB cable.
+3. Open chrome://inspect#devices on your computer.
+4. Accept *Allow USB Debugging* when prompted on the headset.
+5. Find the headset's active page under *Remote Target* on chrome://inspect#devices and select *Inspect*.
 
-# How to create your own demo
+## Create a demo
 
-1. Go to the [scenes folder](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/scenes/) and create a .js file based on the template of [shapes.js](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/scenes/shapes.js)
-2. Change the name and the content of the demo to whatever you like!
-3. Go to [scenes.js](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/scenes/scenes.js), add the name of your demo and its path to the returned value of [```scenes```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/scenes/scenes.js#L13)
-4. Note that the [```enableSceneReloading```](https://github.com/futurerealitylab/VR-2026-Spring/tree/master/js/scenes/scenes.js#L12) is set to true so that you can hot-reload the changes in your demo. 
+1. Create a JavaScript file in [js/scenes](js/scenes/), using [shapes.js](js/scenes/shapes.js) as a template.
+2. Add the scene's name and path to the list in [scenes.js](js/scenes/scenes.js).
+3. With `enableSceneReloading` enabled, you can reload changes while developing the scene.
 
-# How to enable your hand-tracking
+## Enable hand tracking
 
 1. Enable the experimental feature in the browser (Oculus Browser 11)
 2. Visit chrome://flags/
