@@ -1,5 +1,6 @@
 
 function Server(wsPort) {
+   const accumulatedQueues = new Set();
    var that = this;
    this.name = name;
 
@@ -193,6 +194,12 @@ function Server(wsPort) {
 
          var obj = JSON.parse(event.data);
 
+         if (obj.type === 'welcome') {
+            if (Number.isSafeInteger(obj.clientID) && obj.clientID >= 0)
+               window.clientID = obj.clientID;
+            return;
+         }
+
          if (obj.eventType) {
             obj.event.preventDefault = () => { };
             (events_canvas[obj.eventType])(obj.event);
@@ -206,8 +213,15 @@ function Server(wsPort) {
                      window[obj.global][obj.start + i] = this.construct(obj.value[i]);
                else if (obj.element !== undefined)
                   window[obj.global][obj.element] = this.construct(obj.value);
-               else
-                  window[obj.global] = this.construct(obj.value);
+               else {
+                  const value = this.construct(obj.value);
+                  // Opt-in message queues retain every ordered WebSocket batch
+                  // until sync consumes it, even when the receiver renders slowly.
+                  const accumulate = [...accumulatedQueues].some(name =>
+                     obj.global.startsWith('__' + name + '_updates__'));
+                  window[obj.global] = accumulate
+                     ? Object.assign(window[obj.global] || {}, value) : value;
+               }
             }
             catch (e) { }
             return;
@@ -259,11 +273,13 @@ function Server(wsPort) {
    let msngr_name = name => name + '_updates';
    let index_name = name => name + '_updates_index';
 
-   this.init = (name, default_value) => {
+   this.init = (name, default_value, { accumulate = false } = {}) => {
+      if (accumulate) accumulatedQueues.add(name);
       if (window[name] === undefined)
          window[name] = default_value;
       window[msngr_name(name)] = {};
-      window[index_name(name)] = 0;
+      // Keep message IDs unique when a scene is re-entered on the same socket.
+      window[index_name(name)] = accumulate ? window[index_name(name)] || 0 : 0;
    }
 
    this.send = (name, msg_obj) => window[msngr_name(name)][window[index_name(name)]++] = msg_obj;
@@ -273,6 +289,7 @@ function Server(wsPort) {
    this.syncInterval = value => syncInterval = value;
 
    this.sync = (name, callback) => {
+      if (window.clientID === undefined || window.clients === undefined) return;
       window[name] = server.synchronize(name, syncInterval);
       let m_name = msngr_name(name);
       let isNotEmpty = name => window[name] && Object.keys(window[name]).length >0;
@@ -301,14 +318,15 @@ function Server(wsPort) {
 
    let channelSendQueue = []; // SENDER CHANNELS MUST WAIT FOR A VALID WEB-RTC ID.
    let channelOpenQueue = []; // OPENER CHANNELS MUST WAIT FOR A VALID WEB-RTC ID.
+   let channelsInitialized = window.clientID !== undefined;
 
    this.synchronize = (name, interval) => {
 
-      if (window.clients === undefined)                 // DO NOT DO ANYTHING UNTIL THE
-         return window[name];                           // SERVER PROVIDES A CLIENT LIST.
+      if (window.clients === undefined || window.clientID === undefined)
+         return window[name]; // Wait for the server's identity and clients list.
 
-      if (window.clientID === undefined) {              // ON START-UP, ASSIGN A UNIQUE ID
-         window.clientID = clients[clients.length-1];   // TO THIS CLIENT.
+      if (!channelsInitialized) {
+         channelsInitialized = true;
 
          for (let i = 0 ; i < clients.length ; i++)     // ALSO CREATE CHANNEL OBJECTS FOR
             if (clients[i] != clientID) {               // SENDING ONE-TO-ONE PEER CONNECTION
@@ -437,4 +455,3 @@ window.shared = func => {
       channel[clientID].on = data => _shared_result = data;
    return _shared_result;
 }
-

@@ -7,6 +7,7 @@ export const BLOCKS = [
 ];
 const definition = type => BLOCKS.find(b => b.type === type);
 const clone = value => JSON.parse(JSON.stringify(value));
+export const COLLECTOR = { position: [-.8, 1.15, -1.8], radius: .45 };
 const children = node => node.body || [];
 const findList = (program, parent) => {
    if (parent === 0) return program;
@@ -135,6 +136,7 @@ const handState = () => ({ held: false, runner: null, next: null, cooldown: 0, f
 export class Game {
    constructor(random = Math.random) { this.random = random; this.reset(); }
    reset() {
+      this.pendingEvents = [];
       Object.assign(this, { phase: 'ready', wave: 0, hp: 5, energy: 100, score: 0, kills: 0,
          shots: 0, time: 0, draft: [{ id: 1, type: 'fire' }], program: [{ id: 1, type: 'fire' }],
          revision: 1, nextNodeId: 2, inventory: Object.fromEntries(BLOCKS.map(b => [b.type, 0])),
@@ -151,6 +153,13 @@ export class Game {
       for (const key of Object.keys(this.snapshot())) if (snapshot[key] !== undefined) this[key] = snapshot[key];
    }
    edit(op, role = 'editor') {
+      const accepted = this.editDraft(op, role);
+      if (role === 'editor' || role === 'solo')
+         this.pendingEvents.push({ type: 'compile', ok: accepted && !this.error });
+      return accepted;
+   }
+   takeEvents() { return this.pendingEvents.splice(0); }
+   editDraft(op, role = 'editor') {
       if (role !== 'editor' && role !== 'solo') return false;
       const draft = clone(this.draft), inventory = { ...this.inventory };
       let nextId = this.nextNodeId;
@@ -189,13 +198,36 @@ export class Game {
       if (result.ok) { this.program = clone(draft); this.revision++; }
       return true;
    }
-   pickup(id, ray, role = 'editor') {
-      if (role !== 'editor' && role !== 'solo' || !ray) return false;
+   drag(action, id, ray, pull = 0, role = 'editor') {
+      if (role !== 'editor' && role !== 'solo') return false;
       const index = this.loot.findIndex(item => item.id === id);
       if (index < 0) return false;
-      const item = this.loot[index], distance = raySphere(ray.origin, ray.direction, item.position, .35);
-      if (distance === null || distance > 12) return false;
-      this.inventory[item.type]++; this.loot.splice(index, 1); return true;
+      const item = this.loot[index];
+      if (action === 'release' || action === 'cancel') {
+         if (!item.held) return false;
+         delete item.held;
+         if (action === 'release' && Math.hypot(...item.position.map((v, i) => v - COLLECTOR.position[i])) <= COLLECTOR.radius) {
+            this.inventory[item.type]++;
+            this.loot.splice(index, 1);
+            this.pendingEvents.push({ type: 'collect', position: COLLECTOR.position.slice() });
+         }
+         return true;
+      }
+      if (!ray || ![ray.origin, ray.direction].every(v => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite)) ||
+          Math.abs(Math.hypot(...ray.direction) - 1) > .001 || !Number.isFinite(pull) || Math.abs(pull) > .3)
+         return false;
+      if (action === 'grab') {
+         const distance = raySphere(ray.origin, ray.direction, item.position, .35);
+         if (this.loot.some(drop => drop.held) || distance === null || distance > 12) return false;
+         item.held = true;
+         return true;
+      }
+      if (action !== 'move' || !item.held) return false;
+      // Project onto the controller beam, as in beamSphere.js; pull adjusts depth.
+      const depth = item.position.reduce((sum, v, i) => sum + (v - ray.origin[i]) * ray.direction[i], 0);
+      const distance = Math.max(.25, Math.min(12, depth - pull));
+      item.position = ray.origin.map((v, i) => v + ray.direction[i] * distance);
+      return true;
    }
    startWave() {
       if (!['ready', 'upgrade'].includes(this.phase)) return false;
@@ -231,7 +263,7 @@ export class Game {
          position: [Math.sin(angle) * distance, y + .1 * Math.sin(this.time * 2 + seed), -Math.cos(angle) * distance] });
    }
    tick(seconds, rays = {}) {
-      const dt = Math.max(0, Math.min(Number.isFinite(seconds) ? seconds : 0, .05)), events = [];
+      const dt = Math.max(0, Math.min(Number.isFinite(seconds) ? seconds : 0, .05)), events = this.takeEvents();
       this.time += dt; this.lowEnergy = Math.max(0, this.lowEnergy - dt);
       for (const state of Object.values(this.hands)) state.flash = Math.max(0, state.flash - dt);
       if (this.phase !== 'playing') return events;
@@ -250,10 +282,11 @@ export class Game {
          const { pellets, damage } = state.next, cost = 9 + (pellets - 1) * 4 + (damage - 1) * 4;
          if (this.energy < cost) { this.lowEnergy = .6; continue; }
          this.energy -= cost; state.next = null; state.cooldown = .16; state.flash = .12; state.iteration++;
+         let pellet = 0;
          for (const direction of directions(ray, pellets)) {
             const { enemy, distance } = nearestEnemy({ origin: ray.origin, direction }, this.enemies);
             this.shots++;
-            events.push({ type: 'shot', hand, origin: ray.origin.slice(),
+            events.push({ type: 'shot', hand, sound: pellet++ === 0, origin: ray.origin.slice(),
                position: ray.origin.map((v, i) => v + direction[i] * distance), hit: !!enemy });
             if (enemy) {
                enemy.hp = Math.max(0, enemy.hp - damage); enemy.hit = .15;
@@ -277,7 +310,7 @@ export class Game {
          }
       }
       this.enemies = this.enemies.filter(e => e.hp > 0);
-      if (!this.hp) { this.phase = 'lost'; this.cancel(); return events; }
+      if (!this.hp) { this.phase = 'lost'; this.cancel(); events.push({ type: 'lost' }); return events; }
       this.spawnIn -= dt;
       if (this.remaining > 0 && this.spawnIn <= 0 && this.enemies.length < 5) {
          this.spawn(); this.remaining--; this.spawnIn = 1.8 - .2 * this.wave;

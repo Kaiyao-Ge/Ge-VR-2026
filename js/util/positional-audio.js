@@ -15,7 +15,7 @@ let pauseTexture = new UrlTexture('./media/textures/pause-button.png');
 // const AudioContext = window.AudioContext || window.webkitAudioContext;
 
 // Audio scene globals
-let audioContext = new AudioContext();
+export const audioContext = new AudioContext();
 
 export let resonance;
 let resonanceSource;

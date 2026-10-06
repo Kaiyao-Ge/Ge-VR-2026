@@ -2,7 +2,7 @@
 
 Coursework for CSCI-GA.3033-097 Virtual Reality, Fall 2026, based on the [class repository](https://github.com/futurerealitylab/VR-2026-Fall).
 
-## HW2: Spellcode
+## HW3: Spellcode multiplayer
 
 Spellcode is a cooperative VR game. One player defends a core with two guns;
 the other collects code blocks and uses loops and weapon modifiers to change
@@ -10,6 +10,15 @@ how the guns fire. In-game text explains the controls, shows status and score,
 and announces victory or defeat. Select **spellcode** to play, or choose
 **SOLO DEBUG** to test both roles with one headset or a mouse.
 See the [game instructions and checks](doc/spellcode.md).
+
+HW3 adds multiplayer through the classroom `server.init/send/sync` message
+framework. Open the same `?spellcodeRoom=TEAM42` URL on both devices, select
+**spellcode**, and choose **GUNNER** and **CODER**.
+The coder drags dropped blocks along a controller beam and releases
+them inside a collection ring. Both clients share the battle, inventory, and
+gun program; each player's code panel remains private.
+Spatial audio follows the class `construct.js` example, with positional effects,
+a moving drag sound, and local volume controls. Wear headphones to test direction.
 
 ## Set up the environment
 

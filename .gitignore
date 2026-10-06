@@ -29,6 +29,7 @@ clientDataMessages.json
 screenAnchorConfig.json
 ballInfo.json
 solarSystemState.json
+spellcode_*.json
 
 # Operating-system files
 .DS_Store

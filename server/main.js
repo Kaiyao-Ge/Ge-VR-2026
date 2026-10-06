@@ -345,6 +345,8 @@ try {
 	    ws.index = n;
       websockets[ws.index] = ws;
       clients.push(ws.index);
+      // Identity belongs to this socket, not to the latest clients-list entry.
+      ws.send(JSON.stringify({ type: 'welcome', clientID: ws.index }));
 
       let sendClients = () => {
          let data = JSON.stringify({ global: "clients", value: clients });

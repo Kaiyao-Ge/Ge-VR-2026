@@ -210,11 +210,7 @@ const addDemoButtons = (demoNames, scenesInit) => {
             // use a button
             header.innerHTML += '<button onclick=reloadCurrentScene();>Reload</button>';
 
-            // or automatically reload if you exit and re-enter the window
-
-            window.addEventListener("focus", (event) => { 
-               window.reloadCurrentScene();
-            }, false);
+            // Keep reload explicit: refocusing must not reset an active game.
             // or eventually the server should just tell the application when a file has changed
             // TODO: 
             // ...
@@ -285,9 +281,13 @@ async function loadScene(info) {
 
 const rootPath = "./scenes/";
 export async function scenesSetup() {
+   // Only once. Running it again for each XR session duplicated the scene
+   // list and rebuilt the header, which left the Enter XR button dead.
+   if (scenesInit)
+      return;
    return import("./scenes/scenes.js").then((userInitNamespace) => {
       publicScenes =[] 
-      let params = null;      
+      let params = null;
       if (!userInitNamespace.default) {
          console.warn("No user initialization procedure specified!");
       } else {
