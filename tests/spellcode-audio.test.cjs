@@ -32,22 +32,12 @@ const url = source => 'data:text/javascript;base64,' + Buffer.from(source).toStr
    assert.equal(nodes.length, 2);
    sound.event({ type: 'compile', ok: false }, 'editor', [0, 1, -1]);
    assert.equal(nodes.length, 3);
-   const game = { phase: 'playing', loot: [{ held: true, position: [0, 1, -4] }], enemies: [] };
-   const options = { silent: false, battlePaused: false, allowDrag: true };
-   sound.update(game, options, 0);
-   const loop = nodes.at(-1);
-   assert.equal(loop.loop, true);
-   game.loot[0].position = [2, 1, -3];
-   sound.update(game, options, .1);
-   assert.equal(nodes.at(-1), loop);
-   assert.deepEqual(spatial[8].position, [12, 1, -3]);
+   const game = { phase: 'playing', enemies: [] };
+   const options = { silent: false, battlePaused: false };
+   sound.event({ type: 'warn', position: [0, 3.2, -13.4] }, 'shooter');
+   assert.deepEqual(spatial[3].position, [10, 3.2, -13.4]); // ROOT's telegraph comes from the eye.
    sound.update(game, { ...options, silent: true }, .2);
-   assert.equal(loop.stopped, true);
-   sound.update(game, { ...options, battlePaused: true, allowDrag: false }, .3);
-   assert.equal(nodes.at(-1), loop);
-   sound.update(game, { ...options, battlePaused: true }, .4);
-   assert.equal(nodes.at(-1).loop, true); // DEBUG may drag while battle is paused.
-   game.loot = [];
+   assert.ok(nodes.every(n => n.stopped || n.disconnected));
    game.enemies = [{ distance: 2, position: [1, 1, -2] }];
    sound.update(game, options, 2);
    const count = nodes.length;
@@ -64,6 +54,6 @@ const url = source => 'data:text/javascript;base64,' + Buffer.from(source).toStr
    sound.volume = 1; sound.cue('shot', [0, 0, 0]);
    assert.equal(nodes.length, muted);
    assert.ok(nodes.every(n => n.stopped && n.disconnected));
-   console.log('ok - spatial voices, coordinate conversion, volley filtering, private cues, drag, pause, warning, mute and cleanup');
+   console.log('ok - spatial voices, coordinate conversion, volley filtering, private cues, ROOT telegraph, warning, mute and cleanup');
    delete globalThis.audioTest;
 })().catch(error => { console.error(error); process.exitCode = 1; });

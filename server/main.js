@@ -434,12 +434,14 @@ app.route("/api/aiquery").post(function(req, res) {
       ? ((messages[messages.length - 1] && messages[messages.length - 1].content) || "[messages]")
       : queryText;
    openAISharedState.lastQueryId = queryId === undefined ? null : queryId;
-   openAISharedState.lastModel = model || "gpt-5.1";
+   openAISharedState.lastModel = model || process.env.OPENAI_MODEL || "gpt-5.1";
    openAISharedState.lastError = "";
 
    console.log(`[OpenAI] outgoingMessage: ${openAISharedState.outgoingMessage}`);
    
    const apiKey = process.env.OPENAI_API_KEY;
+   // Any OpenAI-compatible provider, e.g. OPENAI_BASE_URL=https://api.deepseek.com/v1
+   const baseURL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
    if (!apiKey) {
       console.error('OpenAI API key not found in .env file');
       openAISharedState.lastError = "OpenAI API key not configured";
@@ -490,7 +492,7 @@ app.route("/api/aiquery").post(function(req, res) {
       if (parallel_tool_calls !== undefined) requestBody.parallel_tool_calls = parallel_tool_calls;
       if (response_format) requestBody.response_format = response_format;
 
-      return fetch('https://api.openai.com/v1/chat/completions', {
+      return fetch(`${baseURL}/chat/completions`, {
          method: 'POST',
          headers: {
             'Content-Type': 'application/json',
@@ -565,7 +567,7 @@ app.route("/api/aiquery").post(function(req, res) {
       if (parallel_tool_calls !== undefined) requestBody.parallel_tool_calls = parallel_tool_calls;
       if (response_format) requestBody.text = { format: response_format };
 
-      return fetch('https://api.openai.com/v1/responses', {
+      return fetch(`${baseURL}/responses`, {
          method: 'POST',
          headers: {
             'Content-Type': 'application/json',

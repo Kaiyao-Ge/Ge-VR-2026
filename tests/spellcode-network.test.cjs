@@ -3,7 +3,7 @@
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
 const path = require('node:path');
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-const load = file => import('data:text/javascript;base64,' + Buffer.from(read(file)).toString('base64'));
+const load = require('./esm.cjs');
 (async () => {
    const { Game } = await load('js/scenes/spellcode/game.js');
    const { Session } = await load('js/scenes/spellcode/session.js');
@@ -158,15 +158,19 @@ const load = file => import('data:text/javascript;base64,' + Buffer.from(read(fi
    }
    {
       const n = network(), { h, e } = n;
-      h.game.loot.push({ id: 1, type: 'fire', position: [0, 1, -5] }); h.session.publish(); n.pump();
-      const ray = { origin: [0, 1, 0], direction: [0, 0, -1] };
-      for (const action of ['grab', 'move', 'release']) {
-         e.session.command({ kind: 'drag', action, id: 1, ray, pull: .3 }); n.sync(e); n.deliver();
+      h.game.prepare({ need: ['chain'] }); h.session.publish(); n.pump();
+      h.game.startWave(); h.game.root.budget = 10; h.game.startAttack({ type: 'GUN_LOCK', hand: 'right' }, '');
+      for (let i = 0; i < 61; i++) h.game.tick(.05, {}); // First lock of the run warns for 3 s.
+      h.session.publish(); n.pump();
+      const glyphs = e.game.active('GUN_LOCK').glyphs;
+      for (const command of [{ kind: 'pick', type: 'chain' }, { kind: 'unlock', glyphs }, { kind: 'panel', open: true }]) {
+         e.session.command(command); n.sync(e); n.deliver();
       }
       n.sync(h);
-      assert.equal(h.game.loot[0].held, undefined);
-      assert.equal(h.game.loot[0].position[2], -4.7);
-      console.log('ok - grab, move, release retain order across receiver stall');
+      assert.equal(h.game.inventory.chain, 1);
+      assert.equal(h.game.active('GUN_LOCK').solved, 'coder');
+      assert.equal(h.game.panel.open, true);
+      console.log('ok - pick, unlock and panel commands retain order across receiver stall');
    }
    {
       const n = network(), { h, e } = n;

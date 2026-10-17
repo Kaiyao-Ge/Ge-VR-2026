@@ -2,23 +2,24 @@
 
 Coursework for CSCI-GA.3033-097 Virtual Reality, Fall 2026, based on the [class repository](https://github.com/futurerealitylab/VR-2026-Fall).
 
-## HW3: Spellcode multiplayer
+## HW4: Spellcode — Root Access
 
-Spellcode is a cooperative VR game. One player defends a core with two guns;
-the other collects code blocks and uses loops and weapon modifiers to change
-how the guns fire. In-game text explains the controls, shows status and score,
-and announces victory or defeat. Select **spellcode** to play, or choose
-**SOLO DEBUG** to test both roles with one headset or a mouse.
-See the [game instructions and checks](doc/spellcode.md).
+Spellcode is a cooperative VR game against the system itself. The gunner fires
+two guns; the coder programs them with loops and weapon modifiers. ROOT, an
+AI antagonist built on the classroom `aiquery.js` helper, reads the players'
+telemetry between waves, designs a daemon to counter their program (behavior,
+Clay geometry and a solution it must pass in simulation), and writes a script
+of sabotage aimed at each player: blackouts, error pop-ups, gun locks, injected
+code, a locked console and block thieves. Most sabotage against one player is
+undone by the other. Without an OpenAI key, ROOT runs hand-written fallback
+scripts. Select **spellcode** to play, or choose **SOLO DEBUG** to test both
+roles alone. See the [game instructions and checks](doc/spellcode.md) and the
+[HW4 design](doc/spellcode-hw4-design.md).
 
-HW3 adds multiplayer through the classroom `server.init/send/sync` message
-framework. Open the same `?spellcodeRoom=TEAM42` URL on both devices, select
-**spellcode**, and choose **GUNNER** and **CODER**.
-The coder drags dropped blocks along a controller beam and releases
-them inside a collection ring. Both clients share the battle, inventory, and
-gun program; each player's code panel remains private.
-Spatial audio follows the class `construct.js` example, with positional effects,
-a moving drag sound, and local volume controls. Wear headphones to test direction.
+Two-player mode (from HW3) uses the classroom `server.init/send/sync` message
+framework: open the same `?spellcodeRoom=TEAM42` URL on both devices, select
+**spellcode**, and choose **GUNNER** and **CODER**. Spatial audio follows the
+class `construct.js` example. Wear headphones to test direction.
 
 ## Set up the environment
 

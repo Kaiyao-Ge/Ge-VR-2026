@@ -64,7 +64,9 @@ const assert = require('node:assert/strict');
                   const origin = [0, 1.5, 0];
                   const delta = this.game.enemies[0].position.map((value, i) => value - origin[i]);
                   args[1] = { right: { origin, direction: delta.map(value => value / Math.hypot(...delta)) } };
-                  this.game.press('right'); window.testFire = false;
+                  // Keep pressing until a kill: base daemons have up to 2 hp.
+                  this.game.release('right'); this.game.press('right');
+                  if (this.game.kills) window.testFire = false;
                }
                return tick.apply(this, args);
             };

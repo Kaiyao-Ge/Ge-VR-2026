@@ -49,7 +49,6 @@ export class Session {
          }
          if (message.from === this.editorId && message.epoch === this.editorEpoch) {
             this.editorId = null; this.editorEpoch = null;
-            for (const item of this.game.loot) delete item.held;
          }
          return;
       }
@@ -57,7 +56,6 @@ export class Session {
          if (message.type === 'hello' && message.role === 'editor' &&
              (message.host === null || message.host === this.id())) {
             if (this.waiting || this.editorId === message.from) {
-               if (this.editorEpoch !== message.epoch) for (const item of this.game.loot) delete item.held;
                this.editorId = message.from;
                this.editorEpoch = message.epoch;
                this.lastEditorMessage = Date.now();
@@ -67,10 +65,7 @@ export class Session {
          if (message.type !== 'command' || message.from !== this.editorId || message.epoch !== this.editorEpoch ||
              message.host !== this.id() || message.hostEpoch !== this.epoch || message.role !== 'editor') return;
          this.lastEditorMessage = Date.now();
-         const cmd = message.command || {};
-         if (cmd.kind === 'drag') this.game.drag(cmd.action, cmd.id, cmd.ray, cmd.pull, 'editor');
-         if (cmd.kind === 'edit' && cmd.operation && typeof cmd.operation === 'object')
-            this.game.edit(cmd.operation, 'editor');
+         if (message.command && typeof message.command === 'object') this.game.command(message.command, 'editor');
          this.publish();
       } else if (message.role === 'shooter' && message.type === 'snapshot' &&
                  (this.hostId === null || this.hostId === message.from ||
@@ -125,19 +120,18 @@ export class Session {
          this.send('hello');
       }
       if (this.role !== 'shooter') return;
-      if (this.waiting) for (const item of this.game.loot) delete item.held;
       const wasPaused = this.paused;
       this.paused = this.waiting || paused;
       if (this.paused !== wasPaused || now >= this.nextSnapshotAt) this.publish();
    }
-   tick(dt, rays, paused = false) {
+   tick(dt, rays, paused = false, head) {
       this.networkTick(paused);
       if (this.role !== 'shooter') {
          const events = Date.now() - this.eventsAt <= 500 ? this.events : [];
          this.events = [];
          return events;
       }
-      const events = this.paused ? this.game.takeEvents() : this.game.tick(dt, rays);
+      const events = this.paused ? this.game.takeEvents() : this.game.tick(dt, rays, head);
       if (events.length) this.publish(events);
       return events;
    }

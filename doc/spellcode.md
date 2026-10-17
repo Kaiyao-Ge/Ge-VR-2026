@@ -1,122 +1,116 @@
-# HW3: Spellcode multiplayer
+# HW4: Spellcode — Root Access
 
-Spellcode is a cooperative VR game with two roles. The gunner uses two guns to defend a core; the coder collects blocks dropped by defeated bugs and edits the guns' firing program. Survive three waves to win. Five core breaches end the run. Each defeated bug earns `100 × wave` points.
+Spellcode is a cooperative VR game in which two players fight the system itself. **ROOT**, the AI that controls the machine, designs enemies (daemons) to counter the players' gun program and sabotages both players during combat. The gunner is jacked in and fires two guns; the coder reads ROOT's code and programs the guns. Hold the uplink through four waves to win. Losing all five core segments ends the run.
 
-The in-game text explains the controls and shows the score, wave, core health, and energy. The final screen displays **YOU WIN** or **YOU LOSE** and offers a replay button.
-
-This assignment extends the HW2 game with the classroom message-passing API, controller-beam dragging, and spatial audio.
+HW4 adds the AI antagonist to the HW3 multiplayer game, using the classroom `AIQuery` helper from `aiquery.js`. The full design and its reasoning are in the [HW4 design document](spellcode-hw4-design.md).
 
 ## Launch
 
-After installing the project's dependencies, run the server from the repository root with Node 18:
+Run the server from the repository root with Node 18:
 
 ```sh
 nvm use 18
 node server/main.js 2026 2026 http
 ```
 
-On both headsets, open the **same URL**, replacing `HOST` with the computer's LAN IP address:
+For model-designed waves, create `.env` in the repository root before starting the server. The server works with any OpenAI-compatible provider; this project is tested with DeepSeek's non-thinking model:
+
+```sh
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+OPENAI_MODEL=deepseek-chat
+```
+
+Leave out the last two lines to use OpenAI (`gpt-5.1`). `.env` is ignored by git. With DeepSeek, one request takes about 2–4 seconds and a plan, including at most one retry, takes 3–7 seconds; ROOT starts planning at 70% of a wave, so the plan is ready before the break. In a test of 18 plans, 14 came from the model and 4 fell back after two rejected attempts (malformed JSON or a solution needing two unowned blocks). Without a key the game is still fully playable: ROOT uses hand-written fallback scripts, and the debrief says `ROOT OFFLINE: FALLBACK SCRIPT`.
+
+On both headsets, open the same URL, replacing `HOST` with the computer's LAN IP address:
 
 ```text
 http://HOST:2026/?spellcodeRoom=TEAM42
 ```
 
-Select **spellcode** on both devices. One player chooses **GUNNER**; the other chooses **CODER**. Enter VR with two tracked controllers per player. The gunner can start once both players have joined.
+Select **spellcode** on both devices. One player chooses **GUNNER**; the other chooses **CODER**. The gunner starts once both players have joined. The design assumes both players are in the same room and can talk.
 
-If the coder stops sending messages, the battle pauses until communication resumes. A closed connection requires the coder to reload and choose CODER again. Opening the coder's panel or editing code does not pause a cooperative battle. Switching roles in SOLO DEBUG does pause the run. To change a co-op role, reload the page and choose again; reloading the gunner starts a new run.
+Without `spellcodeRoom`, choose **SOLO DEBUG** to test both roles alone on a desktop or one headset. DEBUG starts with 99 of each block.
 
-Each player has a private code panel, so the coder's workspace does not obstruct the gunner's view. Both devices show the same arena relative to each player's starting head position. This version does not align physical play spaces or display teammate avatars.
+## How a run works
 
-Without `spellcodeRoom`, choose **SOLO DEBUG** on the in-game role screen. This works on desktop or one headset. The Python anchor service is not required.
+| Wave | Length | ROOT |
+| --- | --- | --- |
+| 1 | 45 s | Watches and logs. No sabotage. |
+| 2 | 60 s | First designed daemon and first countermeasures (budget 6). |
+| 3 | 75 s | A daemon aimed at your current program; larger budget (10). |
+| 4 | 90 s | Everything at once (budget 14). The uplink completes at the end. |
 
-## Test alone with SOLO DEBUG
+Waves end when their timer runs out; remaining daemons are purged. Each survived wave repairs one core segment and adds two program slots. Daemons score `50 × hp`.
 
-### Browser headset emulation
+Between waves:
 
-Enable Immersive Web Emulator and reload `http://localhost:2026/`. Select
-**spellcode**, then click **ENTER AR** to start the simulated headset. The classroom
-framework uses an inline session for preview and restores the canvas to the page
-so the scene menu remains accessible. Use the emulator's headset and controller controls to aim,
-press triggers, and operate the panels. **SOLO DEBUG** still allows one person to
-switch between shooting and editing. End the simulated session to return to the
-page; **ENTER AR** starts another session without resetting the game.
-Switching display modes pauses an active run. Point the right controller at
-**RESUME RUN** and press its trigger before shooting again.
+- The HUD shows the **debrief**: ROOT's reasons for the last wave and who resolved each countermeasure, and how fast.
+- The coder's console shows the **intercepted source** of the next wave's daemon, with a comment on each trait naming its counter (for example `armor(1); // -1 per bolt → power`), and offers **three blocks**; the coder picks one. At least one offer is a block that beats the new daemon.
+- The gunner starts the next wave when ready. If ROOT has not finished planning, the fallback script is used; the game never waits for the model.
 
-The optional `tests/xr-emulator.test.cjs` browser check uses Playwright and the
-official `iwer` runtime, installed separately from the app. It checks page
-preview, AR entry, controller shooting, exit, and re-entry. Set
-`NODE_PATH` to that installation's `node_modules` and run
-`node tests/xr-emulator.test.cjs` with the server running. `XR_TEST_URL` overrides
-the default `http://localhost:2026/` address. This does not replace testing the
-extension UI or a real headset.
+## ROOT's countermeasures
 
-### Game controls
+ROOT's eye on the back wall turns to its target and its line appears about a second before each attack. After an attack starts, the eye opens for two seconds: three hits halve every active countermeasure and cost ROOT one budget point. Each player suffers at most one countermeasure at a time, with at least 8 seconds between attacks on the same player.
 
-1. Open `http://HOST:2026/` (or `localhost` on the computer), select **spellcode**, then **SOLO DEBUG**. You start as the coder with 99 of each block, so you can build code before the first shot.
-2. Select a `+` slot, then a block. After adding a loop or modifier, insert or move a `fire()` call into its body to complete the draft.
-3. Press **GUNNER** on the HUD. Point at **START RUN**, then fire. During a wave, switching roles automatically pauses the simulation.
-4. Press **CODER** to inspect/edit or collect drops while paused. Press **GUNNER**, then **RESUME** to continue. The HUD also has a manual **PAUSE/RESUME** button and a DEBUG-only **COLLECT DROPS** button for drops obstructed by the desktop panel.
+A tip board below the aim corridor tells each player what to do about every active countermeasure, including the ones aimed at the teammate; the coder's console repeats the coder's task in its status line. The first countermeasure of each type in a run gives three times the usual warning, so there is time to read the tip. Outside combat the board shows how to start and when to pick a block.
 
-On desktop, click enemies to shoot as the gunner. As the coder, hold the mouse button on a dropped block, aim toward the cyan collection ring, and scroll down to pull it closer (up to push it away). Release inside the ring to collect it. Close the code panel with `Tab` if it covers a drop or the ring. In DEBUG, `1` selects the gunner, `2` selects the coder, and `P` pauses or resumes. Press `3` at the initial menu to enter DEBUG.
+| Countermeasure | Target | Effect | Resolution |
+| --- | --- | --- | --- |
+| BLACKOUT | Gunner | A black packet flies at the gunner's head. If it lands, vision goes 92% dark for about a second. | Shoot the packet or lean out of its path. No breach resolves during a blackout. |
+| POPUP | Gunner | 1–3 error dialogs block shots in the aim corridor. | Shoot the gold ✕ at each dialog's top right. |
+| GUN_LOCK | Gunner | One gun stops firing; the gunner's HUD shows four glyphs. | The gunner reads the glyphs aloud; the coder enters them on the console. |
+| INJECT | Coder | A hidden `wait(0.8)` or a misfiring line that looks exactly like `fire()` appears in the program. | The gunner describes the symptom; the coder finds and deletes the line. It reverts after 30 s. The fake line never counts as a `fire()`, so deleting the real one leaves an incomplete draft and the gun keeps its last program. |
+| PANEL_LOCK | Coder | The console cannot be edited. | The gunner shoots the gold lock in the arena. |
+| THIEF | Coder | A gold daemon carries one stock block toward the gates. | The gunner kills it within 6 s to return the block. If the wave ends first, the block comes back. |
 
-In VR, use the right controller to select buttons and the left controller to collect drops as the coder. DEBUG runs locally, even when the URL includes a room name.
+Every countermeasure ends after its maximum duration even if nobody resolves it.
 
 ## Controls
 
 | Gunner | Coder |
 | --- | --- |
-| Both triggers fire. | Hold the left trigger on a drop, drag it to the cyan ring, then release. Pull the left stick back to bring it closer; push forward to move it away. Right ray + trigger edits code. No gun firing. |
-| Left grip/side button opens or closes a **read-only** code preview. | Left grip/side button opens or closes the private IDE workspace. |
-| Point at **START RUN**, **NEXT WAVE**, or **PLAY AGAIN** on the HUD with the right ray. | Choose a `+` insertion slot, then a collected block; select a code line to **MOVE TO +**, **DELETE**, or **CHANGE xN**. |
+| Both triggers fire. | Right ray + trigger edits code, picks draft blocks and enters lock glyphs. |
+| Left grip opens a **read-only** code preview. | Left grip opens or closes the private console. |
+| Point at **START RUN**, **NEXT WAVE** or **PLAY AGAIN** on the side HUD. | Choose a `+` slot, then a block; select a line to **MOVE TO +**, **DELETE** or **CHANGE xN**. |
 
-The HUD also has an **OPEN/CLOSE CODE** button. If tracking, focus, or display mode pauses the game, point at **RESUME RUN**. Desktop preview uses the mouse to aim/click the right gun and UI; `Enter` starts or advances a wave, `Tab` toggles the code panel, and `P` pauses/resumes for the gunner.
-
-A held block follows the closest point on the controller beam, with stick input adjusting its depth. The ring turns gold when the block is inside. Releasing outside the ring leaves the block in the arena. Losing tracking, closing the panel, or switching roles cancels the drag without collecting it. Only the coder can drag or collect blocks.
-
-## Multiplayer messages
-
-`spellcode.js` initializes a room-specific channel with `server.init`, queues messages with `server.send`, and processes them through `server.sync` on a 100 ms timer and on rendering frames. This follows `construct.js` in the supplied class checkout; that checkout does not contain `connect.js`. Beam projection follows the technique in `beamSphere.js`.
-
-Spellcode uses `server.init(channel, {}, { accumulate: true })` to retain incoming message batches until the next network update. The classroom receiver would otherwise replace each batch, dropping edits when the sender runs faster than the receiver. Other scenes keep the classroom behavior. Delivery relies on an open, ordered WebSocket connection.
-
-Every scene session has a unique identifier. Snapshots identify the accepted coder, and commands identify the host session they target; stale commands cannot modify a restarted run. A new host session resets the coder's event baseline. Extra coders see **CODER ROLE OCCUPIED** and cannot send commands until paired. Both clients send a departure message when leaving the scene; heartbeat timeouts cover departures that cannot be delivered.
-
-The gunner runs the simulation and sends snapshots every 100 ms, after game events, and after coder commands. The gunner checks each command's sender, role, inventory, code structure, and drag ray before applying it. Queued snapshots hold copies of the state, so later game updates cannot change an unsent message. Block positions, inventory, enemies, score, and the gun program are shared; controller poses and panels stay local.
-
-Both clients send a heartbeat once per second. A separate timer receives and sends messages even when render callbacks stop or head tracking is unavailable. The timer does not advance the battle, and leaving the scene clears it. Pending sound and visual events are capped at 128 and discarded after 500 ms without a new batch.
-
-Browsers can delay timers or suspend all JavaScript. Silence longer than three seconds pauses the battle and releases held blocks, as does a missing peer in the client list. Closing the local socket immediately invalidates pairing and stops new outgoing messages from accumulating. Heartbeats restore communication after a render stall; a closed WebSocket requires a page reload. Automatic socket reconnection, host migration, and persistent matches are not implemented. The classroom relay assumes trusted participants.
-
-## Spatial audio
-
-Sound uses the AudioContext, Resonance Audio scene, and three mono samples from the class `construct.js` example. The placeholder effects vary those samples' playback rate and gain. The HUD sound button enables audio and cycles through 50%, 100%, and off. Each player controls their own volume.
-
-Gun volleys, kills, core damage, collection, and round results play at their arena positions, transformed into the local headset's coordinates. A quiet loop follows a held chip; a rate-limited warning identifies the nearest enemy within 2.5 meters. Compile feedback is private to the coder. Eight independent short-effect voices and one drag voice prevent simultaneous sounds from sharing a position. There is no background music or voice chat.
-
-Both clients play shared events locally; no audio streams are transmitted. Repeated snapshots do not replay the same event batch. Pausing stops battle sounds, while SOLO DEBUG still allows drag and edit feedback. Losing focus, waiting for a teammate, muting, or leaving the scene stops active sounds. Missing audio assets or an unavailable Resonance library leave the game playable without sound. In VR, if sound remains locked, select the sound button after entering the session.
-
-On a headset, test left/right shots and turn your head while dragging a chip: sound should stay at the visible object. Disconnect the coder and switch scenes to check for lingering loops. Headphone testing is needed to judge direction and volume.
-
-## Visual design
-
-The arena is a low-poly data-core station: repeated structural frames establish depth, cyan floor markers lead toward the enemy entrance, and five floor-mounted lights show core health. Enemy drones use red armor and an amber visor. Dropped code appears as amber chips; the collection ring has a **CODE INTAKE** sign and turns gold when a held chip is inside.
-
-The private editor uses a file tab, line numbers, indentation guides, and syntax colors. The HUD separates score, wave progress, core health, and energy. Guns have an energy indicator on top. Geometry is generated with the existing Clay primitives and a narrowed version of its torus mesh; panels use Canvas textures. There are no imported game assets, full-screen flashes, or bloom passes. The geometric environments and contrasting accents in [Pistol Whip's official screenshots](https://www.cloudheadgames.com/pistol-whip) served as visual reference, not as assets.
+A clicked button consumes that trigger press. Desktop preview: click to aim and fire with the right gun, `Enter` starts or advances a wave, `Tab` toggles the code panel, `P` pauses. In DEBUG, `1` selects the gunner and `2` the coder; switching roles pauses the run. Press `3` at the role menu to enter DEBUG.
 
 ## Programming rules
 
-The initial program contains one `fire(weapon, hand)` call. Insert blocks at the `+` slots between statements or inside a loop or modifier. Move existing blocks to change their order or nesting. In co-op, you earn blocks from kills; DEBUG provides them at the start.
+The run starts with `while (triggerHeld) { fire(); }` and one each of `fire`, `for` and `spread` in stock. Every block uses one slot; capacity starts at 4 and grows to 10.
 
-- `fire()` fires one bolt.
-- `for` repeats its body 2, 3, or 5 times per trigger press.
-- `while (triggerHeld)` repeats its body until that trigger is released.
-- `spread()` wraps its body with a 3- or 5-bolt fan.
-- `power()` wraps its body with 2× or 3× damage.
+| Block | Behavior |
+| --- | --- |
+| `fire()` | One volley with the modifiers in scope. |
+| `for` | Repeat 2, 3 or 5 times per trigger press; finishes after release. |
+| `while (triggerHeld)` | Repeat while the trigger is held. At most one. |
+| `wait` | Pause 0.2, 0.4 or 0.8 s. |
+| `spread()` | 3- or 5-bolt fan (total cap 5). |
+| `power()` | 2× or 3× damage per bolt (total cap 3). |
+| `pierce()` | Each bolt also hits the next daemon behind its target. |
+| `chain()` | Each hit jumps once to the nearest daemon within 2 m, so it can reach a shield from the side. |
 
-Select **CHANGE xN** to cycle a block's allowed values. You can leave a loop or modifier empty while arranging the draft; the gun keeps its last valid program until the draft is complete. The validator checks block IDs, nesting, loop structure, and weapon limits. Only one `while` block is allowed. The game interprets the blocks directly without evaluating arbitrary JavaScript.
+There is no energy. After a volley of `bolts × damage` weight, that hand waits `0.18 × weight` seconds, so ideal damage per second is the same for basic, spread and powered fire; modifiers change delivery, not raw rate. A trigger cannot fire more than 64 bolts per press. A valid edit applies on the next trigger press; a held `while` adopts it at the end of its current cycle.
 
-A valid edit takes effect on the next trigger press. A firing sequence already in progress keeps its original program. A finite `for` run finishes after trigger release; releasing a trigger stops a program containing `while`. Each volley costs `9 + 4 × (bolts − 1) + 4 × (damage − 1)` energy, which regenerates at 18 per second.
+## Daemons
+
+Daemons use a small trait language: `approach`, `strafe`, `armor`, `shield`, `regen`, `phase` and `onDeath { split }`. The source shown to the coder is rendered from the same data the game executes. The base library (drone, skitter, brick, bulwark, pulse, mender, splitter) fills the waves; ROOT adds one designed daemon per wave.
+
+## How ROOT plans
+
+At 70% of each wave, the gunner's client (or the SOLO DEBUG client) sends one request through `AIQuery.queryFull` with a JSON response format. The request contains telemetry: the program, owned blocks, accuracy, hand use, kills by daemon, and how each countermeasure was resolved, plus a one-line memory of the previous run from `localStorage`. The model returns a daemon design (traits, up to 12 Clay primitives, and its own solution program), spawn groups, and conditional tactics with prewritten lines.
+
+The game clamps every value to its allowed range and then tests the design: a headless simulation must show the AI's solution killing the daemon before it reaches the breach line, using at most one block type the coder does not own. The starter program `while (triggerHeld) { fire(); }` on one gun must also kill it before it breaches, so no daemon is immune, and its spawn groups together arrive no faster than that one gun can clear them. A rejected plan gets one retry with the errors; after that, or after a network error or missing key, the fallback script is used. Responses for an old run or wave are discarded. In combat, the local director evaluates the script's triggers every frame and enforces the budget and the one-attack-per-player rule. Each request and response is kept in `window.spellcodeRootLog` for inspection.
+
+## Multiplayer
+
+The gunner's client is authoritative: it runs the simulation, ROOT's director and the model requests, and sends snapshots every 100 ms and after events. The coder sends `edit`, `pick`, `unlock` and `panel` commands; the gunner applies them. Messages use the classroom `server.init/send/sync` framework with `accumulate: true`, room-specific channels, per-session identifiers, and heartbeats; silence longer than three seconds pauses the battle. Lock glyphs and injected-line flags are present in snapshots, and the coder's client does not display them; this relies on the classroom relay's trusted, same-room participants.
+
+## Spatial audio
+
+Sound uses the AudioContext, Resonance Audio scene and two mono samples from the class `construct.js` example. ROOT's telegraphs and attacks play from the eye's position; shots, kills, breaches and a nearby-daemon warning play at their arena positions. Compile and unlock feedback is private to the coder. The HUD sound button cycles 50%, 100% and off.
 
 ## Checks
 
@@ -126,12 +120,8 @@ node tests/spellcode-network.test.cjs
 node tests/spellcode-audio.test.cjs
 ```
 
-These checks cover block order and nesting, validation, trigger release, role permissions, close-range hits, dragging and collecting drops, room synchronization, victory and defeat, and HUD text. The transport check runs the actual `server/client.js` in isolated JavaScript contexts with an in-memory WebSocket relay; it checks two-client editing and collection plus a third client in a different room. It is not a browser or headset test.
+These cover the block language and capacity, the 64-bolt limit, cycle-boundary deployment, every daemon trait, pierce and chain, time-based waves and victory/defeat, each countermeasure and its resolution, the eye, budget and per-player limits, script normalization, generate-and-test, retry/fallback/stale handling in `Root`, snapshots and commands over the real classroom client, panels, and audio voices.
 
-The network regression test independently schedules each client. It checks low frame rates, networking without rendering, bounded effects, socket closure, membership changes, timeout recovery, ordered commands, role occupancy, and stale session messages. The audio test uses audio-node doubles to check voice isolation, coordinate mapping, drag movement, pause, mute, and cleanup.
+With the server running and `NODE_PATH` pointing to a separate Playwright installation, `node tests/spellcode-coop-browser.test.cjs` runs two browser clients and checks pairing, focus changes, panel toggles and battle progress.
 
-With the server running and `NODE_PATH` pointing to a separate Playwright installation, run `node tests/spellcode-coop-browser.test.cjs`. It uses two browser clients and an isolated broadcast relay to check focus changes, panel toggles, and battle progress after killing the first enemy and stopping all coder render callbacks for five seconds. It does not simulate a browser freezing all JavaScript.
-
-For a two-client manual check, open the same room URL in two browser windows and choose GUNNER and CODER. Kill a bug, drag its drop into the ring as the coder, then use the collected block in the program. Confirm the gunner's read-only preview updates. Close the coder window and confirm the battle freezes; rejoin as CODER and confirm it resumes. Use different room names to check isolation. Finally, repeat on two headsets to check readability, controller alignment, and comfort.
-
-Known validation issue: A sequence of more than 64 top-level `fire()` calls can bypass the shot limit. The existing automated checks do not catch this case.
+Live DeepSeek planning was tested through the server proxy with scripted telemetry, not yet in a played run. Not yet verified: headset comfort of BLACKOUT, and frame time on a headset. At very low frame rates the simulation's 50 ms frame cap stretches countermeasure timings in real time.

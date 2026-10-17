@@ -1,9 +1,12 @@
 import * as cg from '../render/core/cg.js';
-import { controllerMatrix, buttonState, joyStickState } from '../render/core/controllerInput.js';
-import { BLOCKS, COLLECTOR, Game, nearestEnemy, raySphere } from './spellcode/game.js';
+import { controllerMatrix, buttonState } from '../render/core/controllerInput.js';
+import { AIQuery } from '../util/aiquery.js';
+import { BLOCKS, EYE, Game, nearestEnemy } from './spellcode/game.js';
+import { PALETTE } from './spellcode/daemons.js';
+import { Root } from './spellcode/root.js';
 import { Session } from './spellcode/session.js';
 import { GameAudio } from './spellcode/audio.js';
-import { makePanel, drawIDE, drawHUD, buttonAt, pickButtonHit } from './spellcode/panels.js';
+import { makePanel, drawIDE, drawHUD, drawWall, drawPopup, buttonAt, pickButtonHit } from './spellcode/panels.js';
 
 let cleanup;
 export const init = async (model, ctx = {}, ctxForever = {}) => {
@@ -13,26 +16,34 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
    const room = (params.get('spellcodeRoom') || '').trim().slice(0, 24).toUpperCase();
    const channel = 'spellcode_' + encodeURIComponent(room);
    const ui = { room, mode: 'select', role: 'select', editorOpen: false,
-      selectedSlot: { parent: 0, index: 1 },
+      selectedSlot: { parent: 0, index: 1 }, glyphs: [],
       selectedNode: null, moving: false, scroll: 0, hover: null,
       paused: false, pauseReason: '', xr: false, waiting: false };
-   let session = null;
+   let session = null, root = null;
+   // ROOT plans through the classroom AIQuery helper (/api/aiquery).
+   const ai = new AIQuery({ timeout: 25000 });
+   const ask = async messages => {
+      const data = await ai.queryFull('', { messages, response_format: { type: 'json_object' } });
+      return JSON.parse(data.message?.content || data.response);
+   };
    const arena = model.add();
+   // Drawn after the arena, so the blackout layer covers everything in it.
+   const shade = model.add('square').color(0, .02, .01).dull().opacity(.0001);
    const sound = new GameAudio(position => cg.mTransform(arena.getGlobalMatrix(), position));
-   const effects = [], enemies = new Map(), drops = new Map(), textures = [];
-   const ide = makePanel(1024, 1024), hud = makePanel(1024, 512);
+   const effects = [], enemies = new Map(), textures = [];
+   const ide = makePanel(1024, 1024), hud = makePanel(1024, 512), wall = makePanel(1024, 256);
    const editor = arena.add(), dashboard = arena.add().move(0, 2.65, -3.5);
    const gl = window.clay.gl, canvas = gl.canvas;
    const disposers = [];
-   let anchor = null, wasXR = null, wasGrip = false, editorPose = null;
+   let anchor = null, wasXR = null, wasGrip = false, editorPose = null, panelOpen = false;
    const wasHeld = { left: false, right: false }, captured = { left: false, right: false };
    let mouse = null, mouseHeld = false, mouseTap = false, paintIn = 0, live = true;
-   let dragging = null, dragIn = 0, wheelPull = 0;
    let audioFocused = true;
 
    const mesh = (parent, form, position, size, color) =>
       parent.add(form).move(position).scale(size).color(color).dull();
-   const cyan = [.24, .9, .84], dark = [.018, .03, .045], gold = [1, .69, .29];
+   const cyan = [.24, .9, .84], dark = [.012, .03, .022], gold = [1, .69, .29];
+   const green = [.25, 1, .5], red = [1, .16, .2];
    // Narrow the framework's thick torus without adding a shader or extra draws.
    if (!window.clay.formMesh('spellcodeRing')) {
       const ring = window.clay.formMesh('torusZ').slice();
@@ -43,63 +54,49 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       }
       window.clay.defineMesh('spellcodeRing', ring);
    }
-   // Opaque low-poly architecture: no full-screen bloom or moving camera effects.
+   // Black machine space: floor grid, three lanes, structural frames.
    mesh(arena, 'cube', [0, -.16, -4], [6, .14, 8], dark);
-   mesh(arena, 'cube', [0, -.012, -4], [2.45, .012, 6.8], [.035, .057, .076]);
    for (let i = 0; i < 12; i++) {
       const z = 2 - i * 1.1;
-      mesh(arena, 'cube', [0, .005, z], [5.8, .003, .008], [.075, .12, .15]);
-      for (const side of [-1, 1]) {
-         mesh(arena, 'cube', [side * 2.5, .012, z], [.018, .008, .36], [.10, .42, .43]);
-         if (i > 2) mesh(arena, 'cube', [side * .26, .018, z], [.18, .005, .025], [.10, .28, .30])
-            .turnY(side * -.55);
-      }
+      mesh(arena, 'cube', [0, .005, z], [5.8, .003, .008], [.05, .16, .09]);
+      for (const side of [-1, 1]) mesh(arena, 'cube', [side * 2.5, .012, z], [.018, .008, .36], [.10, .42, .25]);
    }
+   for (const angle of [-.42, 0, .42])
+      mesh(arena, 'cube', [Math.sin(angle) * 5, .01, -Math.cos(angle) * 5], [.025, .006, 4], [.12, .55, .3]).turnY(-angle);
    for (const side of [-1, 1]) {
-      mesh(arena, 'cube', [side * 5.7, .12, -4], [.18, .25, 7.7], [.055, .09, .12]);
-      mesh(arena, 'cube', [side * 5.48, .35, -4], [.025, .012, 7.7], [.16, .57, .57]);
+      mesh(arena, 'cube', [side * 5.7, .12, -4], [.18, .25, 7.7], [.03, .08, .05]);
       for (let i = 0; i < 5; i++) {
          const z = -1 - i * 2.6, height = 1.7 + (i % 3) * .6;
-         mesh(arena, 'cube', [side * 6.2, height, z], [.55, height, .5], [.035, .06, .09]);
-         mesh(arena, 'cube', [side * 5.63, height, z + .3], [.018, height * .65, .06], [.09, .30, .36]);
-         mesh(arena, 'cube', [side * 6.2, height * 2, z], [.65, .08, .6], [.08, .13, .18]);
+         mesh(arena, 'cube', [side * 6.2, height, z], [.55, height, .5], [.02, .05, .035]);
+         mesh(arena, 'cube', [side * 5.63, height, z + .3], [.018, height * .65, .06], [.09, .36, .2]);
       }
    }
-   // The back wall and repeated portals give the arena a readable vanishing point.
-   mesh(arena, 'cube', [0, 4, -14], [10, 5, .2], [.016, .025, .045]);
+   mesh(arena, 'cube', [0, 4, -14], [10, 5, .2], [.01, .025, .016]);
    for (let i = 0; i < 3; i++) {
-      const z = -8 - i * 2.3, tint = [.10 - i * .02, .34 - i * .06, .39 - i * .06];
-      for (const side of [-1, 1]) {
-         mesh(arena, 'cube', [side * 4.3, 2.8, z], [.20, 2.8, .24], [.06, .085, .12]);
-         mesh(arena, 'cube', [side * 4.07, 2.8, z + .25], [.035, 2.7, .025], tint);
-      }
-      mesh(arena, 'cube', [0, 5.5, z], [4.5, .20, .24], [.06, .085, .12]);
+      const z = -8 - i * 2.3, tint = [.08, .34 - i * .06, .18 - i * .03];
+      for (const side of [-1, 1]) mesh(arena, 'cube', [side * 4.07, 2.8, z + .25], [.035, 2.7, .025], tint);
       mesh(arena, 'cube', [0, 5.27, z + .25], [4.1, .025, .025], tint);
    }
-   const gate = arena.add().move(0, 2.3, -13.7);
-   mesh(gate, 'spellcodeRing', [0, 0, 0], [1.45, 1.45, 1], [.12, .25, .30]);
-   const gateRing = mesh(gate, 'spellcodeRing', [0, 0, .12], [1.23, 1.23, .6], [.24, .65, .65]);
-   mesh(gate, 'octahedron', [0, 0, .1], [.48, .7, .18], [.14, .33, .38]);
-   mesh(arena, 'torusY', [0, .025, 0], [1, .025, 1], [.10, .25, .28]);
+   mesh(arena, 'torusY', [0, .025, 0], [1, .025, 1], [.10, .28, .18]);
    const coreLights = [];
    for (let i = 0; i < 5; i++) {
       const a = (i - 2) * .48, x = Math.sin(a) * 1.18, z = -.1 + Math.cos(a) * .75;
-      mesh(arena, 'cube', [x, .08, z], [.14, .08, .18], [.07, .11, .14]);
+      mesh(arena, 'cube', [x, .08, z], [.14, .08, .18], [.05, .09, .07]);
       coreLights.push(mesh(arena, 'cube', [x, .165, z], [.10, .008, .13], cyan));
    }
-   const collector = mesh(arena, 'spellcodeRing', COLLECTOR.position,
-      [COLLECTOR.radius, COLLECTOR.radius, .6], cyan);
-   mesh(arena, 'spellcodeRing', COLLECTOR.position, [.51, .51, .8], [.07, .18, .22]);
-   mesh(arena, 'cube', [-.8, .25, -1.86], [.025, .25, .025], [.12, .27, .30]);
-   mesh(arena, 'cube', [-.8, .035, -1.86], [.33, .025, .22], [.07, .15, .18]);
-   for (let i = 0; i < 16; i++)
-      mesh(arena, 'octahedron', [Math.sin(i * 13.7) * 7, 2 + (i % 7) * .42, -9 - i % 3],
-         .015, [.12, .24, .29]);
+   // ROOT's eye turns toward the player it is about to attack.
+   const eye = arena.add().move(EYE);
+   mesh(eye, 'sphere', [0, 0, 0], .95, [.02, .05, .035]);
+   const eyeRing = mesh(eye, 'spellcodeRing', [0, 0, .3], [1.2, 1.2, 1], green);
+   const iris = eye.add();
+   const irisDisk = mesh(iris, 'sphere', [0, 0, .78], [.42, .42, .16], green);
+   mesh(iris, 'sphere', [0, 0, .9], [.17, .17, .08], [0, 0, 0]);
+   const packet = arena.add();
+   mesh(packet, 'sphere', [0, 0, 0], .22, [.01, .01, .01]);
+   mesh(packet, 'torusZ', [0, 0, 0], [.3, .3, .06], red);
 
    function surface(parent, panel, w, h) {
-      mesh(parent, 'cube', [0, 0, -.013], [w + .012, h + .012, .012], [.025, .065, .095]);
-      for (const side of [-1, 1])
-         mesh(parent, 'cube', [side * (w + .016), h - .06, 0], [.003, .06, .004], cyan);
+      mesh(parent, 'cube', [0, 0, -.013], [w + .012, h + .012, .012], [.02, .065, .045]);
       const node = parent.add('square').scale(w, h, 1).dull().setTxtr(panel.canvas);
       const channel = node._txtr;
       gl.activeTexture(gl.TEXTURE0 + channel);
@@ -109,14 +106,16 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
    }
    const editorFace = surface(editor, ide, .34, .34);
    const hudFace = surface(dashboard, hud, 1.65, .825);
-   const dockLabel = makePanel(512, 96);
-   dockLabel.ctx.fillStyle = '#101e29'; dockLabel.ctx.fillRect(0, 0, 512, 96);
-   dockLabel.ctx.fillStyle = '#83e9d9'; dockLabel.ctx.font = '500 29px sans-serif';
-   dockLabel.ctx.textAlign = 'center';
-   dockLabel.ctx.fillText('CODE INTAKE', 256, 38);
-   dockLabel.ctx.font = '22px sans-serif'; dockLabel.ctx.fillStyle = '#cedbe4';
-   dockLabel.ctx.fillText('RELEASE BLOCK INSIDE', 256, 73);
-   surface(arena.add().move(-.8, .56, -1.8), dockLabel, .39, .073);
+   // Tip board: subtitle position, below the aim corridor and clear of the side console.
+   const board = arena.add().move(0, .75, -3).turnX(.28);
+   surface(board, wall, .8, .2);
+   const popupPanel = makePanel(512, 340);
+   drawPopup(popupPanel);
+   const popups = [0, 1, 2].map(() => {
+      const node = arena.add();
+      surface(node, popupPanel, .3, .2);
+      return node;
+   });
    const guns = {};
    for (const hand of ['left', 'right']) {
       const color = hand === 'left' ? [.66, .48, 1] : cyan;
@@ -141,15 +140,12 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       target.addEventListener(event, handler, true);
       disposers.push(() => target.removeEventListener(event, handler, true));
    }
-   function drag(action, ray, pull = 0) {
-      if (dragging === null) return;
-      if (session) session.command({ kind: 'drag', action, id: dragging, ray, pull });
-      else game.drag(action, dragging, ray, pull, 'editor');
-      if (action === 'release' || action === 'cancel') { dragging = null; wheelPull = 0; }
+   function command(cmd) {
+      if (session) session.command(cmd);
+      else game.command(cmd, 'editor');
    }
    function cancel() {
       sound.stop();
-      drag('cancel');
       game.cancel();
       mouseHeld = false;
       mouseTap = false;
@@ -168,15 +164,22 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       cancel();
       paintIn = 0;
    }
+   function makeRoot() {
+      root = new Root(game, ask);
+      window.spellcodeRootLog = root.records; // Per-wave requests, responses and validation.
+   }
+   function debugStock() { for (const block of BLOCKS) game.inventory[block.type] = 99; }
    function chooseRole(role) {
       if (ui.mode === 'select') {
          if (role === 'debug') {
             ui.mode = 'debug';
             ui.role = 'editor';
-            for (const block of BLOCKS) game.inventory[block.type] = 99;
+            debugStock();
+            makeRoot();
          } else if (room && (role === 'shooter' || role === 'editor')) {
             ui.mode = 'coop';
             ui.role = role;
+            if (role === 'shooter') makeRoot();
             window.server.init(channel, {}, { accumulate: true });
             session = new Session(game, { room, role,
                id: () => window.clientID, clients: () => window.clients || [],
@@ -203,11 +206,7 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       }
       if (id.startsWith('role:')) { chooseRole(id.slice(5)); return; }
       if (ui.mode === 'select') return;
-      const edit = operation => {
-         if (ui.role !== 'editor') return;
-         if (ui.mode === 'debug') game.edit(operation, 'editor');
-         else session.command({ kind: 'edit', operation });
-      };
+      const edit = operation => { if (ui.role === 'editor') command({ kind: 'edit', operation }); };
       if (id.startsWith('slot:')) {
          const [, parent, index] = id.split(':');
          const slot = { parent: Number(parent), index: Number(index) };
@@ -228,11 +227,13 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
          ui.moving = !ui.moving;
       } else if (id.startsWith('scroll:')) {
          ui.scroll = Math.max(0, ui.scroll + Number(id.slice(7)) * 5);
-      } else if (id === 'collect' && ui.mode === 'debug' && ui.role === 'editor') {
-         // ponytail: debug shortcut for occluded drops; co-op requires beam dragging.
-         drag('cancel');
-         for (const item of game.loot) game.inventory[item.type]++;
-         game.loot.length = 0;
+      } else if (id.startsWith('pick:') && ui.role === 'editor') {
+         command({ kind: 'pick', type: id.slice(5) });
+      } else if (id === 'glyph:clear') {
+         ui.glyphs = [];
+      } else if (id.startsWith('glyph:') && ui.role === 'editor') {
+         ui.glyphs.push(Number(id.slice(6)));
+         if (ui.glyphs.length === 4) { command({ kind: 'unlock', glyphs: ui.glyphs }); ui.glyphs = []; }
       } else if (id === 'pause' && (ui.mode === 'debug' || ui.role === 'shooter')) {
          if (ui.paused) { ui.paused = false; ui.pauseReason = ''; }
          else pause();
@@ -245,10 +246,11 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
          if (ui.role === 'editor' || session?.waiting) return;
          if (game.phase === 'won' || game.phase === 'lost') {
             game.reset();
-            if (ui.mode === 'debug') for (const block of BLOCKS) game.inventory[block.type] = 99;
+            if (ui.mode === 'debug') debugStock();
             ui.selectedSlot = { parent: 0, index: 1 };
             ui.selectedNode = null;
          }
+         root?.prepare();
          game.startWave();
          ui.paused = false;
          ui.editorOpen = false;
@@ -277,12 +279,6 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
          if (!ui.xr && (event !== 'mousemove' || mouseHeld)) e.stopImmediatePropagation();
       });
    listen(window, 'pointerup', e => { if (e.button === 0) mouseHeld = false; });
-   listen(canvas, 'wheel', e => {
-      if (!ui.xr && dragging !== null) {
-         wheelPull = Math.max(-.3, Math.min(.3, wheelPull + e.deltaY * .002));
-         e.preventDefault();
-      }
-   });
    listen(canvas, 'pointerleave', () => { mouse = null; mouseHeld = false; mouseTap = false; });
    listen(window, 'keydown', e => {
       sound.unlock();
@@ -373,13 +369,12 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       } else if (event.type === 'kill' || event.type === 'damage') {
          for (let i = 0; i < 6; i++) {
             const a = i * Math.PI / 3;
-            const node = mesh(arena, 'octahedron', event.position, .07,
-               event.type === 'kill' ? cyan : [1, .22, .28]);
+            const node = mesh(arena, 'octahedron', event.position, .07, event.type === 'kill' ? green : red);
             effects.push({ node, life: .42, total: .42, position: event.position.slice(),
                velocity: [Math.cos(a) * .7, Math.sin(a) * .7, .3] });
          }
          if (event.type === 'damage') { pulse('left', .7, 110); pulse('right', .7, 110); }
-      } else if (event.type === 'upgrade') paintIn = 0;
+      } else paintIn = 0;
    }
    function remove(node) {
       arena.remove(node);
@@ -388,10 +383,24 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       const index = children.indexOf(node.dataTree);
       if (index >= 0) children.splice(index, 1);
    }
+   function buildDaemon(def) {
+      const visual = { root: arena.add(), parts: [], shields: [], size: def.size, faded: false };
+      for (const p of def.parts) for (const side of p.mirror ? [1, -1] : [1]) {
+         const node = mesh(visual.root, p.form, [p.pos[0] * def.size * side, p.pos[1] * def.size, p.pos[2] * def.size],
+            p.scale.map(v => v * def.size), PALETTE[p.color]);
+         visual.parts.push(node);
+         if (p.tag === 'shield') visual.shields.push(node);
+      }
+      mesh(visual.root, 'cube', [0, def.size + .1, 0], [.22, .016, .016], [.15, .09, .14]);
+      visual.health = mesh(visual.root, 'cube', [0, def.size + .1, .02], [.22, .016, .016], [1, .55, .40]);
+      return visual;
+   }
    function paint() {
       ui.soundLabel = sound.label;
       drawIDE(ide, game, ui);
       drawHUD(hud, game, ui);
+      // Hidden when there is nothing to say.
+      board.opacity(drawWall(wall, game, ui.mode === 'debug' ? ui.role !== 'editor' : ui.role === 'shooter') ? 1 : .0001);
       for (const t of textures) {
          const entry = window._canvas_txtr[t.channel];
          if (entry?.src === t.canvas) entry.counter = 1;
@@ -406,7 +415,9 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       const head = localHead();
       if (!head) return;
       ui.xr = !!window.isXR?.();
-      dashboard.identity().move(ui.xr ? ui.role === 'editor' ? -1.55 : 0 : 1.35, 2.65, -3.5);
+      // A side console keeps ROOT's eye and the aim corridor clear.
+      const side = ui.xr && ui.role === 'editor' ? -1 : 1;
+      dashboard.identity().move(side * 2, 2.2, -3).turnY(-side * .59);
       if (!anchor || ui.xr !== wasXR) {
          if (wasXR !== null) pause('Display mode changed. Resume when ready.');
          setAnchor(head);
@@ -418,13 +429,18 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       const gripHeld = ui.xr && !!buttonState.left[1]?.pressed;
       if (gripHeld && !wasGrip && ui.mode !== 'select') toggleEditor();
       wasGrip = gripHeld;
+      // ROOT watches how long the coder keeps the console open.
+      if ((ui.role === 'editor' && ui.editorOpen) !== panelOpen) {
+         panelOpen = !panelOpen;
+         command({ kind: 'panel', open: panelOpen });
+      }
       // Each client creates only its own UI. The editor's full workspace is
       // never transmitted as a world object to the gunner's headset.
       if (ui.editorOpen && !editorPose) {
          const pos = ui.xr
             ? cg.add(headPos, ui.role === 'shooter' ? [-.83, -.12, -1.15] : [.42, -.16, -1.15])
             : [-.48, 1.38, -1.02];
-         editor.identity().move(pos).aimZ(cg.subtract(headPos, pos), [1, 0, 0])
+         editor.identity().move(pos).aimZ(cg.subtract(headPos, pos))
             .scale(ui.xr ? ui.role === 'shooter' ? .62 : 1.6 : 1.2);
          editorPose = editor.getMatrix().slice();
       }
@@ -446,114 +462,75 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       const held = { left: ui.xr && !!buttonState.left[0]?.pressed,
          right: ui.xr ? !!buttonState.right[0]?.pressed : mouseHeld || mouseTap };
       mouseTap = false;
-      const pickupHand = ui.role === 'editor' ? ui.xr ? 'left' : 'right' : null;
-      let lootHit = null, lootDistance = 12;
-      if (pickupHand && rays[pickupHand]) for (const item of game.loot) {
-         const d = raySphere(rays[pickupHand].origin, rays[pickupHand].direction, item.position, .35);
-         if (d !== null && d < lootDistance) { lootHit = item; lootDistance = d; }
-      }
       for (const hand of ['right', 'left']) {
          if (!held[hand]) { captured[hand] = false; game.release(hand); }
          if (held[hand] && !wasHeld[hand] && !captured[hand]) {
             sound.unlock();
-            if (hand === pickupHand && lootHit && (hand !== 'right' || !hit || lootDistance < hit.distance)) {
-               dragging = lootHit.id;
-               drag('grab', rays[hand]);
-               dragIn = 0;
-               pulse(hand, .35, 55);
-               captured[hand] = true;
-            } else if (hand === 'right' && hit) {
+            if (hand === 'right' && hit) {
                action(hit.id); captured.right = true; game.cancel('right');
             } else if (ui.role === 'shooter' && !ui.paused && rays[hand])
                game.press(hand);
-         }
+         } else if (held[hand] && !captured[hand] && !game.hands[hand].held && ui.role === 'shooter' && !ui.paused && rays[hand])
+            game.press(hand); // A trigger held through a gun lock resumes once the lock is solved.
          if (!rays[hand] || document.hidden || ui.paused || ui.role !== 'shooter') {
             game.cancel(hand);
             if (held[hand]) captured[hand] = true;
          }
          wasHeld[hand] = held[hand];
       }
-      if (dragging !== null) {
-         const ray = rays[pickupHand];
-         if (!ray || document.hidden || ui.waiting || ui.role !== 'editor') drag('cancel');
-         else {
-            dragIn += dt;
-            if (dragIn >= .05 || !held[pickupHand]) {
-               const stick = ui.xr ? joyStickState.left.y : 0;
-               const pull = Math.max(-.3, Math.min(.3, wheelPull + (Math.abs(stick) > .15 ? stick * 2 * dragIn : 0)));
-               drag('move', ray, pull);
-               wheelPull = 0; dragIn = 0;
-            }
-            if (!held[pickupHand]) drag('release');
-         }
-      }
       const canRun = ui.mode !== 'select' && !ui.paused && !document.hidden;
       const firingRays = { left: captured.left ? null : rays.left,
          right: captured.right ? null : rays.right };
-      const events = session ? session.tick(dt, firingRays, !canRun)
-         : canRun ? game.tick(dt, firingRays) : game.takeEvents();
+      const events = session ? session.tick(dt, firingRays, !canRun, headPos)
+         : canRun ? game.tick(dt, firingRays, headPos) : game.takeEvents();
+      root?.update();
       events.forEach(eventEffect);
       const silent = !audioFocused || document.hidden || ui.waiting || ui.mode === 'select';
       const battlePaused = ui.paused || !!session?.paused;
-      sound.update(game, { silent, battlePaused, allowDrag: !battlePaused || ui.mode === 'debug' && ui.role === 'editor' }, performance.now() / 1000);
+      sound.update(game, { silent, battlePaused }, performance.now() / 1000);
       if (!silent) for (const event of events) {
-         if (!battlePaused || event.type === 'compile' || event.type === 'collect')
-            sound.event(event, ui.role, editor.getMatrix().slice(12, 15));
+         if (!battlePaused || event.type === 'compile') sound.event(event, ui.role, editor.getMatrix().slice(12, 15));
       }
       coreLights.forEach((node, i) => node.color(i < game.hp ? cyan : [.18, .055, .065]));
-      gateRing.color(game.phase === 'lost' ? [.65, .13, .18] : game.phase === 'won' ? gold : [.24, .65, .65]);
+      if (!game.active('GUN_LOCK')) ui.glyphs = []; // A half-entered code never carries over to the next lock.
+
+      // ROOT's eye looks at you when you are its next target.
+      const myTarget = ui.mode === 'debug' || (ui.role === 'shooter' ? 'gunner' : 'coder') === game.root.target;
+      const look = game.root.target && myTarget ? headPos : game.root.target ? [3, 1.2, 0]
+         : [Math.sin(game.time * .4) * 2, 1.4 + Math.sin(game.time * .7) * .3, 0];
+      iris.identity().aimZ(cg.subtract(look, EYE));
+      const exposed = game.root.exposed > 0;
+      irisDisk.color(exposed ? (Math.sin(game.time * 20) > 0 ? gold : [1, 1, 1]) : game.root.target ? red : green);
+      eyeRing.color(game.phase === 'lost' ? red : game.phase === 'won' ? gold : game.root.target ? red : green);
+      if (game.packet) packet.identity().move(game.packet.position).turnZ(game.time * 6);
+      else packet.identity().move(0, -50, 0);
+      popups.forEach((node, i) => {
+         const p = game.popups[i];
+         node.identity().move(p ? p.position : [0, -50, 0]);
+      });
+      // Head-locked blackout: 0.1 s fade in, 0.8 s hold, 0.3 s fade out.
+      const shown = ui.mode === 'debug' || ui.role === 'shooter';
+      const elapsed = 1.2 - game.blackout;
+      const alpha = !shown || game.blackout <= 0 ? 0 : elapsed < .1 ? elapsed / .1 * .92 : elapsed < .9 ? .92 : game.blackout / .3 * .92;
+      shade.setMatrix(cg.mMultiply(head, cg.mMultiply(cg.mTranslate(0, 0, -.12), cg.mScale(.6, .6, 1))));
+      shade.opacity(Math.max(.0001, alpha));
 
       for (const [id, visual] of enemies) {
          if (!game.enemies.some(e => e.id === id)) { remove(visual.root); enemies.delete(id); }
       }
       for (const enemy of game.enemies) {
          let visual = enemies.get(enemy.id);
-         if (!visual) {
-            const root = arena.add();
-            const shell = mesh(root, 'octahedron', [0, 0, 0], .25, [.90, .16, .23]);
-            mesh(root, 'cube', [0, .025, .19], [.17, .075, .035], [.09, .045, .065]);
-            mesh(root, 'cube', [0, .03, .23], [.12, .018, .008], [1, .74, .39]);
-            for (const side of [-1, 1]) {
-               mesh(root, 'octahedron', [side * .22, -.045, 0], [.075, .13, .10], [.40, .065, .12]);
-               mesh(root, 'cube', [side * .22, -.13, .025], [.026, .018, .04], [1, .32, .24]);
-            }
-            mesh(root, 'cube', [0, .36, 0], [.22, .016, .016], [.15, .09, .14]);
-            const health = mesh(root, 'cube', [0, .36, .02], [.22, .016, .016], [1, .55, .40]);
-            const ring = mesh(root, 'torusY', [0, -.03, 0], [.28, .012, .28], [.48, .11, .19]);
-            visual = { root, shell, health, ring };
-            enemies.set(enemy.id, visual);
+         if (!visual) enemies.set(enemy.id, visual = buildDaemon(game.defs[enemy.kind]));
+         visual.root.identity().move(enemy.position).turnY(-enemy.angle).scale(enemy.hit ? 1.12 : 1);
+         const faded = !enemy.vulnerable;
+         if (faded !== visual.faded) {
+            visual.faded = faded;
+            for (const node of visual.parts) node.opacity(faded ? .3 : 1);
          }
-         visual.root.identity().move(enemy.position).turnY(-enemy.angle);
-         visual.shell.identity().turnZ(.08 * Math.sin(game.time * 3 + enemy.seed)).scale(.25)
-            .color(enemy.hit ? [1, .92, .8] : [.9, .12 + .04 * enemy.maxHP, .23]);
-         visual.ring.identity().turnX(.35).turnZ(game.time * .5).scale(.28, .012, .28);
+         for (const node of visual.shields) node.opacity(enemy.shield > 0 ? faded ? .3 : 1 : .0001);
          const fraction = enemy.hp / enemy.maxHP;
-         visual.health.identity().move(-.22 * (1 - fraction), .36, .02).scale(.22 * fraction, .016, .016);
+         visual.health.identity().move(-.22 * (1 - fraction), visual.size + .1, .02).scale(.22 * fraction, .016, .016);
       }
-      for (const [id, visual] of drops) {
-         if (!game.loot.some(item => item.id === id)) { remove(visual); drops.delete(id); }
-      }
-      for (const item of game.loot) {
-         let visual = drops.get(item.id);
-         if (!visual) {
-            visual = arena.add();
-            mesh(visual, 'cube', [0, 0, 0], [.13, .15, .045], [.17, .13, .075]);
-            mesh(visual, 'cube', [0, 0, .049], [.105, .125, .006], [.82, .48, .12]);
-            for (const side of [-1, 1]) {
-               mesh(visual, 'cube', [side * .15, 0, 0], [.012, .11, .025], gold);
-               mesh(visual, 'cube', [0, side * .17, 0], [.09, .012, .025], gold);
-            }
-            const count = BLOCKS.findIndex(b => b.type === item.type) + 1;
-            for (let i = 0; i < count; i++)
-               mesh(visual, 'cube', [0, (i - (count - 1) / 2) * .038, .059], [.07, .009, .003], [.12, .08, .035]);
-            drops.set(item.id, visual);
-         }
-         visual.identity().move(item.position)
-            .turnY(item.held ? 0 : Math.sin(game.time + item.id) * .35)
-            .scale(item.held || lootHit?.id === item.id && ui.role === 'editor' ? 1.12 : 1);
-      }
-      collector.color(game.loot.some(item => item.held && cg.distance(item.position, COLLECTOR.position) <= COLLECTOR.radius)
-         ? [1, .85, .35] : cyan);
       for (let i = effects.length - 1; i >= 0; i--) {
          const effect = effects[i];
          effect.life -= dt;
@@ -570,20 +547,16 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
          visual.pointer.opacity(ray ? 1 : .0001);
          visual.gun.opacity(ui.xr && ray && ui.role === 'shooter' ? 1 : .0001);
          if (!ray) continue;
-         let distance = uiHit?.distance ?? nearestEnemy(ray, game.enemies, 10).distance;
-         if (hand === pickupHand && lootHit && (hand !== 'right' || !uiHit || lootDistance < uiHit.distance))
-            distance = lootDistance;
-         const heldDrop = hand === pickupHand && game.loot.find(item => item.id === dragging);
-         if (heldDrop) distance = cg.distance(ray.origin, heldDrop.position);
+         const distance = uiHit?.distance ?? nearestEnemy(ray, game.enemies, 10).distance;
          const end = cg.add(ray.origin, cg.scale(ray.direction, distance));
          line(visual.beam, cg.add(ray.origin, cg.scale(ray.direction, Math.min(.24, distance))), end,
             uiHit ? .0015 : .0008);
          visual.pointer.identity().move(end).scale(uiHit ? .007 : .012)
             .color(uiHit ? cyan : [1, .77, .37]);
          visual.gun.setMatrix(ray.matrix);
-         visual.muzzle.color(game.hands[hand].flash ? [1, .9, .6] : visual.color);
-         visual.charge.identity().move(0, .049, .045).scale(.028 * Math.max(.02, game.energy / 100), .006, .009)
-            .color(game.energy < 20 ? gold : cyan);
+         const locked = game.gunLocked(hand);
+         visual.muzzle.color(locked ? red : game.hands[hand].flash ? [1, .9, .6] : visual.color);
+         visual.charge.color(locked ? red : game.hands[hand].cooldown > 0 ? gold : cyan);
       }
       paintIn -= dt;
       if (paintIn <= 0) { paint(); paintIn = 1 / 20; }
@@ -593,10 +566,10 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       if (!live) return;
       live = false;
       sound.dispose();
-      drag('cancel');
       session?.send('leave');
       if (session) window.server.sync(channel, () => {});
       game.cancel();
+      game.reset(); // Invalidates any ROOT request still in flight.
       disposers.forEach(dispose => dispose());
       for (const t of textures) {
          if (window._canvas_txtr[t.channel]?.src === t.canvas) {
