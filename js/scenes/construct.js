@@ -1,30 +1,32 @@
-/*
-   Collaboratively  experience: interactively create, move and delete multiple objects.
-   Also an example of how to use spatial audio.
-*/
-
 import * as cg from "../render/core/cg.js";
 import { loadSound, playSoundAtPosition, playLoopingSoundAtPosition02, 
          stopLoopingSound02, updateSound02Position } from "../util/positional-audio.js";
 
-// DECLARE AUDIO OBJECTS
+// LOAD SOUND FILES
 
 let createSoundBuffer = null;
 let deleteSoundBuffer = null;
 let dragSoundBuffer = null;
 
-// INITIALIZE POSITIONAL AUDIO.
+function preloadSounds() {
+    Promise.all([
+        loadSound('../../media/sound/SFXs/demoBalls/SFX_Ball_Create_Mono_01.wav', buffer => createSoundBuffer = buffer),
+        loadSound('../../media/sound/SFXs/demoBalls/SFX_Ball_Delete_Mono_01.wav', buffer => deleteSoundBuffer = buffer),
+        loadSound('../../media/sound/SFXs/demoBalls/SFX_Ball_Drag_Mono_LP_01.wav', buffer => dragSoundBuffer = buffer)
 
-let soundDir = '../../media/sound/SFXs/demoBalls/';
-Promise.all([
-     loadSound(soundDir + 'SFX_Ball_Create_Mono_01.wav' , buffer => createSoundBuffer = buffer),
-     loadSound(soundDir + 'SFX_Ball_Delete_Mono_01.wav' , buffer => deleteSoundBuffer = buffer),
-     loadSound(soundDir + 'SFX_Ball_Drag_Mono_LP_01.wav', buffer => dragSoundBuffer   = buffer)
-])
-.then(() => {})
-.catch(error => {});
+    ])
+    .then(() => {
+        //console.log('All sounds loaded successfully');
+    })
+    .catch(error => {
+        //console.error('An error occurred while loading sounds:', error);
+    });
+}
+
+preloadSounds();
 
 server.init('balls', {});             // INITIALIZE GLOBAL STATE OBJECT.
+
 const radius = 0.05;                  // ALL BALLS HAVE THE SAME RADIUS.
 
 let ballID = { left: -1, right: -1 }; // WHICH BALL IS IN EACH HAND?
@@ -59,12 +61,10 @@ export const init = async model => {
       return newPos;
    }
 
-   // HANDLE CONTROLLER EVENTS FROM THIS CLIENT.
-
    inputEvents.onPress = hand => {
       ballID[hand] = findBall(hand);
       if (ballID[hand] >= 0)
-         playLoopingSoundAtPosition02(dragSoundBuffer, cg.roundVec(4, toHeadsetPos(inputEvents.pos(hand))));
+         playLoopingSoundAtPosition02(dragSoundBuffer, toHeadsetPos(inputEvents.pos(hand)));
    }
 
    inputEvents.onDrag = hand => {
@@ -84,8 +84,8 @@ export const init = async model => {
        if (id >= 0)
            server.send('balls', msg('delete', id, hand));
        else {
-           for (id = 0; balls[id] ; id++)      // FIND AN UNUSED ID,
-	      ;
+           for (id = 0; balls[id] !== undefined ; id++)      // FIND AN UNUSED ID,
+              ;
            server.send('balls', msg('create', id, hand))    // AND CREATE A NEW BALL.
        }
    }
@@ -115,7 +115,7 @@ export const init = async model => {
       while (model.nChildren() > 0)
          model.remove(0);
       for (let id in balls)
-         model.add('sphere').move(balls[id]).scale(radius).dull();
+         model.add('sphere').move(balls[id]).scale(radius);
    });
 }
 
