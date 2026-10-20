@@ -54,7 +54,7 @@ var wsPort = process.argv[3] || 22346;
 app.use(express.static("./"));
 
 // handle uploaded files
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '5mb' })); // tool loops resend the whole conversation
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Add raw body parser for speech endpoint
@@ -422,7 +422,7 @@ holojam.on('tick', (a, b) => {
 */
 
 app.route("/api/aiquery").post(function(req, res) {
-   const { query, queryId, model, messages, tools, tool_choice, parallel_tool_calls, response_format } = req.body;
+   const { query, queryId, model, messages, tools, tool_choice, parallel_tool_calls, response_format, max_tokens } = req.body;
    const hasMessages = Array.isArray(messages) && messages.length > 0;
    const queryText = ((typeof query === "string" ? query : openAISharedState.outgoingMessage) || "").trim();
 
@@ -491,6 +491,7 @@ app.route("/api/aiquery").post(function(req, res) {
       if (tool_choice) requestBody.tool_choice = tool_choice;
       if (parallel_tool_calls !== undefined) requestBody.parallel_tool_calls = parallel_tool_calls;
       if (response_format) requestBody.response_format = response_format;
+      if (max_tokens) requestBody.max_tokens = max_tokens;
 
       return fetch(`${baseURL}/chat/completions`, {
          method: 'POST',
