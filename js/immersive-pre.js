@@ -585,7 +585,7 @@ function onRequestSession() {
     return navigator.xr
         .requestSession("immersive-ar", {
             requiredFeatures: ["local-floor"],
-            optionalFeatures: ["hand-tracking", "layers", "mesh-detection", "depth-sensing", "shared"],
+            optionalFeatures: ["hand-tracking", "layers", "mesh-detection", "depth-sensing", "hit-test", "shared"],
         })
         .then((session) => {
 	    isXRMode = true;
@@ -1118,6 +1118,9 @@ function onXRFrame(t, frame) {
 
     //MESH_DETECTION
     window.detectedMeshes = frame.detectedMeshes;
+    // Scenes read mesh poses during the frame: xrFrame.getPose(mesh.meshSpace, xrFrameRefSpace).
+    window.xrFrame = frame;
+    window.xrFrameRefSpace = refSpace;
 
     if(window.isLayersSuported && session.isImmersive){
 

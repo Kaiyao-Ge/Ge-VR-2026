@@ -20,6 +20,7 @@ export default () => {
             { name: "construction", path: "./construction.js", public: true },
             { name: "bouncing"   , path: "./bouncing.js"   , public: true },
             { name: "widgets"    , path: "./widgets.js"    , public: true },
+            { name: "echohunt"   , path: "./echohunt.js"   , public: true },
       ]
    };
 }

@@ -30,6 +30,7 @@ screenAnchorConfig.json
 ballInfo.json
 solarSystemState.json
 spellcode_*.json
+echohunt.json
 
 # Operating-system files
 .DS_Store
