@@ -711,6 +711,9 @@ let drawMesh = (mesh, materialId, textureSrc, txtr, bumpTextureSrc, bumptxtr, du
    setUniform('1i', 'uBumpTxtr', bumptxtr);
 
 
+   // A NODE WITH view('offscreen') IS DRAWN ONLY INTO THE OFFSCREEN VIEWS, ONE WITH view('main') NEVER INTO THEM.
+   const offscreenOnly = view == 'offscreen';
+
    if (this.views.length == 1) {
       setUniform('Matrix4fv', 'uProj', false, this.views[0].projectionMatrix);
       setUniform('Matrix4fv', 'uView', false, this.views[0].viewMatrix);
@@ -718,7 +721,8 @@ let drawMesh = (mesh, materialId, textureSrc, txtr, bumpTextureSrc, bumptxtr, du
       if (mesh != prevMesh)
          gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.DYNAMIC_DRAW);
 
-      gl.drawArrays(mesh.isTriangles ? gl.TRIANGLES : gl.TRIANGLE_STRIP, 0, mesh.length / VERTEX_SIZE);
+      if (! offscreenOnly)
+         gl.drawArrays(mesh.isTriangles ? gl.TRIANGLES : gl.TRIANGLE_STRIP, 0, mesh.length / VERTEX_SIZE);
 
    } else {
       const drawPrimitiveType = mesh.isTriangles ? gl.TRIANGLES : gl.TRIANGLE_STRIP;
@@ -728,7 +732,7 @@ let drawMesh = (mesh, materialId, textureSrc, txtr, bumpTextureSrc, bumptxtr, du
          gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.DYNAMIC_DRAW);
 
       for (let i = 0; i < this.views.length; ++i) {
-         if (i == 0 && view == 1 || i == 1 && view == 0)
+         if (i == 0 && view == 1 || i == 1 && view == 0 || offscreenOnly)
             continue;
          let v = this.views[i];
          let vp = v.viewport;
@@ -741,6 +745,27 @@ let drawMesh = (mesh, materialId, textureSrc, txtr, bumpTextureSrc, bumptxtr, du
 
          gl.drawArrays(drawPrimitiveType, 0, vertexCount);
       }
+   }
+
+   // VIEWS DRAWN INTO FRAMEBUFFERS OF THEIR OWN, SUCH AS A CAMERA SEEN ON A SCREEN IN THE SCENE.
+   // EACH IS { framebuffer, width, height, projectionMatrix, viewMatrix, frontFace?, back: { framebuffer, viewport } },
+   // back BEING WHAT TO RETURN TO. A SCENE SETS window.clay.offscreenViews FOR THE FRAMES IT WANTS THEM.
+
+   if (this.offscreenViews?.length && view != 'main') {
+      for (let v of this.offscreenViews) {
+         gl.bindFramebuffer(gl.FRAMEBUFFER, v.framebuffer);
+         gl.viewport(0, 0, v.width, v.height);
+         gl.frontFace(v.frontFace || gl.CCW);
+         setUniform('Matrix4fv', 'uProj', false, v.projectionMatrix);
+         setUniform('Matrix4fv', 'uView', false, v.viewMatrix);
+         setUniform('3fv', 'uEye', cg.mMultiply(clay.inverseRootMatrix, cg.mInverse(v.viewMatrix)).slice(12,15));
+         setUniform('1i', 'uViewIndex', 0);
+         gl.drawArrays(mesh.isTriangles ? gl.TRIANGLES : gl.TRIANGLE_STRIP, 0, mesh.length / VERTEX_SIZE);
+      }
+      let back = this.offscreenViews[0].back;
+      gl.frontFace(gl.CCW);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, back.framebuffer);
+      gl.viewport(...back.viewport);
    }
 
    if (flags)

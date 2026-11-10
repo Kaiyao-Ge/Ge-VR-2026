@@ -41,9 +41,12 @@ export class DepthReader {
       gl.linkProgram(this.program);
       if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(this.program));
       this.vao = gl.createVertexArray();
+      // Clay keeps a texture bound on each unit: put back the one this unit had.
+      const bound = gl.getParameter(gl.TEXTURE_BINDING_2D);
       this.target = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, this.target);
       gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, N, N);
+      gl.bindTexture(gl.TEXTURE_2D, bound);
       this.fb = gl.createFramebuffer();
       const old = gl.getParameter(gl.FRAMEBUFFER_BINDING);
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.fb);
