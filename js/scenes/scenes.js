@@ -22,6 +22,7 @@ export default () => {
             { name: "widgets"    , path: "./widgets.js"    , public: true },
             { name: "echohunt"   , path: "./echohunt.js"   , public: true },
             { name: "miniature"  , path: "./miniature.js"  , public: true },
+            { name: "doorways"   , path: "./doorways.js"   , public: true },
       ]
    };
 }
