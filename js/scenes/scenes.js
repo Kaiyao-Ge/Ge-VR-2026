@@ -23,6 +23,9 @@ export default () => {
             { name: "echohunt"   , path: "./echohunt.js"   , public: true },
             { name: "miniature"  , path: "./miniature.js"  , public: true },
             { name: "doorways"   , path: "./doorways.js"   , public: true },
+            { name: "minime"     , path: "./minime.js"     , public: true },
+            { name: "kbdEvents"  , path: "./kbdEvents.js"  , public: true },
+            { name: "kbdEvents2" , path: "./kbdEvents2.js" , public: true },
       ]
    };
 }
