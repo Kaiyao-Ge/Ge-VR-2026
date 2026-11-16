@@ -7,7 +7,7 @@ rooms, able to pick up keys, unlock gates and press switches. Neither can
 finish alone, and each knows something the other does not.
 
 Scene name `doorways`. It reuses the HW7 modules in `js/scenes/miniature/`
-(mapping, physics, rays, world, avatar, scanner, scanned, scandraw) and
+(mapping, physics, rays, world, avatar; the scan modules are not used, see "As built") and
 leaves the single-player `miniature` scene unchanged.
 
 ## Decisions
@@ -153,8 +153,8 @@ gates (0–2), anchors (0–1), turntable, and empty chests.
 ### Shared frame
 
 Everything shared is in the table's frame. The headset's table is the
-scanned or X-calibrated real table (HW7); the desktop's is the default
-table. So the giant appears to the mini where the headset player really
+X-calibrated real table (left controller laid flat on it, X); until then, and
+on the desktop, it is the World default table. So the giant appears to the mini where the headset player really
 stands at the real table.
 
 ### Bodies
@@ -320,6 +320,39 @@ What differs from the sections above, and why.
   role when alone, B new round, Y swap roles, X table, left stick walk, right
   stick turn and, pushed forward, aim, grip take or hold, trigger use), keys on
   the desktop. After a win the message is drawn once, in the big line only.
+- **There is no room scan.** The scene takes no depth scan (HW7's still does): a
+  headset player found it useless, and it could put the board in the
+  background. The table stays at the World default until X, with the left
+  controller laid flat on the real table, calibrates it; the mini's view
+  keeps World's solid box room round the table.
+- **All six symbol textures are made and uploaded at init,** before the first
+  round, on hidden nodes (scale 0) through `symbolTexture`; a rug only takes the
+  unit of its symbol (`txtr`), so no canvas, channel or GL texture is made in
+  the middle of a headset session. Clay uploads a canvas texture only in
+  `drawMesh`, when a node using it is first drawn, and it skips nodes of scale
+  0; so `symbolTexture` also uploads the pixels itself (`texImage2D` right
+  after `setTxtr`, the active unit restored) and sets the channel's `counter`
+  to 0 so that the first draw does not upload again. The cause of the sun that a
+  headset player could not find on any rug in round 2 is still unconfirmed
+  (not reproduced on the desktop); creation and upload in the middle of the
+  session were the suspects. Another candidate: `getArbitraryChannel` hands out
+  channels 1 to 14 and then reuses one in use, so two textures could share a
+  channel. At init the scene warns once (`console.warn`) if the panel's channel
+  or a symbol's is another's, and the report below says per symbol whether its
+  channel is uploaded and still holds its own canvas.
+- **The scene reports to the server log** (`doorways <json>` on `/log`, as
+  echohunt does) at each round's start (`ev: 'round'`), at the win (`'win'`)
+  and every 5 s (`'tick'`), on the desktop and in the headset, to diagnose a
+  headset report. The line (`report.js`, version `v: 1`) holds `xr`, `role`,
+  `paired`, `round`, the level (`seed`, `goal`, `goalSymbol`, `rooms`: `[id,
+  symbol, slot, rot, flags]` with flags among k, s, c, g, a), `mini`,
+  `visited` (rooms the client has had as `state.mini` this round, in order),
+  `reachable`, the mini's part of the state, `channels` (per symbol: its texture
+  `channel`, `uploaded` when its pixels are in the texture, `same` when the
+  channel still holds the symbol's own canvas, false if another texture took
+  it over), `txtrChannel`, and `errors` (with `lastError`). A frame that
+  throws is counted, its first message of each kind goes to the console, and
+  the frame loop goes on.
 - **Textures are given back on leaving:** the panel's and the symbols' canvases
   take a texture channel and a GL texture each; cleanup removes them from
   `_canvas_txtr` and `txtrChannel` and deletes the textures (as Spellcode).
@@ -349,6 +382,7 @@ js/scenes/doorways/mini.js       the mini's world, walking, riding, teleport aim
 js/scenes/doorways/input.js      headset and desktop input as one set of numbers; key and mouse capture
 js/scenes/doorways/panel.js      wrist panel: task card, keys, clock, messages
 js/scenes/doorways/net.js        `Session` (presence, roles, rounds, snapshots, timeouts), `lerpPose`, `Interp`
+js/scenes/doorways/report.js     `reportOf`: the line the scene sends to the server log
 js/scenes/doorways/pair.js       `Link`: what each client sends and applies, validation, rounds, the held room's interpolation
 js/scenes/doorways/bodies.js     the partner's head and hands, the giant's and the mini's figures
 js/scenes/scenes.js              one line to register `doorways`
@@ -399,8 +433,7 @@ view matrix.
 
 ### What only a headset can check
 
-- The depth scan and the table: that the scan finds the table, and that the
-  table frame lines up with the real one (X to calibrate).
+- The table: that the table frame lines up with the real one (X to calibrate).
 - That the giant figure on the mini's page stands where the real person stands at
   the real table, and that the mini's hands move with the real hands (the XR
   bodies come from `clientState`; only a fake one is tested).
@@ -408,7 +441,7 @@ view matrix.
   turning it with the right stick; the teleport aim.
 - Riding a room the giant turns: whether the tilt on the avatar is comfortable
   at 12 times scale, and the 1.5 s flight.
-- Frame rate on Quest, with two views and the scan's mesh.
+- Frame rate on Quest, with two views.
 - The desktop giant's hand at the mouse grab point and its orientation (a guess
   to judge by eye), and the size and place of the wrist panel.
 

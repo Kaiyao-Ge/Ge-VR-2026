@@ -6,7 +6,7 @@
 // the floors without moving the camera; F at a switch presses it and frees the anchored room; a
 // teleport to a room it cannot reach is refused; the mini in a room the giant holds and turns is
 // still inside it after the snap; an empty chest costs 20 s, the goal chest wins and N starts a
-// new round; no page errors. DOORWAYS_SHOTS=dir saves screenshots of the views there.
+// new round; every symbol has a texture, uploaded, at the start and a later level makes none; the /log reports (round, win); no page errors. DOORWAYS_SHOTS=dir saves screenshots of the views there.
 // Then two players, two pages of the browser on a routed relay (see twoPlayers below).
 // Run with NODE_PATH pointing to an installation containing playwright.
 const { chromium } = require('playwright');
@@ -249,6 +249,15 @@ const twoPlayers = async (browser, url) => {
       // The headless browser draws slowly (a frame can take a few hundred ms): wait for what an event does at the next frame.
       const until = async (f, a) => { for (let i = 0; i < 80; i++) { const v = await run(f, a); if (v) return v; await wait(100); } return run(f, a); };
       const view = () => run(() => Array.from(clay.views[0].viewMatrix));
+      const frames = () => run(() => doorwaysDebug.frames);
+      const later = async () => { const f = await frames(); await until(f => doorwaysDebug.frames > f + 1, f); };
+      // What the scene reports to the server log: each POST to /log, let through to the server as it would be, kept to look at.
+      const logs = [];
+      await page.route('**/log', async route => {
+         const m = /doorways (\{.*\})/.exec(route.request().postData() || '');
+         if (m) logs.push(JSON.parse(m[1]));
+         await route.continue();
+      });
       await page.goto(url.href);
       await page.getByText('doorways', { exact: true }).click();
       await page.evaluate(() => document.querySelector('details')?.removeAttribute('open'));
@@ -264,8 +273,9 @@ const twoPlayers = async (browser, url) => {
 
       // Page-side helpers: a free cell, a movable room, where a table point is on the screen.
       await run(async () => {
-         const R = await import('/js/scenes/doorways/rules.js'), cg = await import('/js/render/core/cg.js');
+         const R = await import('/js/scenes/doorways/rules.js'), cg = await import('/js/render/core/cg.js'), G = await import('/js/scenes/doorways/generate.js');
          window.T = {
+            G,
             R, cg,
             free: () => R.CELLS.filter(c => !Object.values(doorwaysDebug.state.at).some(a => a.slot === c)),
             movable: skip => doorwaysDebug.level.rooms.find(r => r.id !== skip && R.movable(doorwaysDebug.level, doorwaysDebug.state, r.id)).id,
@@ -277,6 +287,48 @@ const twoPlayers = async (browser, url) => {
             roof: id => { const c = R.slotCentre(doorwaysDebug.state.at[id].slot); return [c[0], R.ROOM.WALL + .2 / 12, c[2]]; },
          };
       });
+
+      // Every symbol has its texture at the start, before a round that shows it: this level (seed 7) has no sun, and a later one
+      // that has does not make a new texture in the middle of the session (the headset could not find the sun on any rug).
+      const SYMBOLS = await run(() => T.R.SYMBOLS), first = await run(() => doorwaysDebug.level.rooms.map(r => r.symbol));
+      const channels = await run(() => doorwaysDebug.symbolChannels);
+      assert.deepEqual(Object.keys(channels).sort(), [...SYMBOLS].sort(), 'a texture for each of the six symbols');
+      assert.equal(new Set(Object.values(channels)).size, SYMBOLS.length, 'each on a channel of its own');
+      const panelChannel = await run(() => doorwaysDebug.panelChannel);
+      assert.ok(!Object.values(channels).includes(panelChannel), 'and none is the wrist panel\'s channel');
+      // The pixels are uploaded at the start too (counter 0: Clay will not upload again at a first draw): the sun's first rug,
+      // in round 2, makes and uploads nothing.
+      assert.deepEqual(await run(ch => ch.map(c => window._canvas_txtr[c]?.counter <= 0), Object.values(channels)), SYMBOLS.map(() => true), 'every symbol texture is uploaded already');
+      assert.ok(SYMBOLS.some(x => !first.includes(x)), 'the first level lacks a symbol');
+      const texturesAtStart = await run(() => ({ mine: doorwaysDebug.textures.length, count: window.txtrChannel.length }));
+      const seed2 = await run(first => { for (let s = 8; s < 500; s++) if (T.G.generate(s).level.rooms.some(r => !first.includes(r.symbol))) return s; }, first);
+      assert.ok(seed2, 'a seed with a symbol that the first level lacks');
+      await run(s => doorwaysDebug.newRound(s), seed2);
+      assert.equal(await run(() => doorwaysDebug.level.seed), seed2);
+      await later();
+      assert.ok(await run(first => doorwaysDebug.level.rooms.some(r => !first.includes(r.symbol)), first), 'the new level shows a symbol the first lacked');
+      assert.deepEqual(await run(() => ({ mine: doorwaysDebug.textures.length, count: window.txtrChannel.length })), texturesAtStart, 'no texture or channel was made for it');
+      assert.deepEqual(await run(() => doorwaysDebug.symbolChannels), channels, 'the symbols keep their channels');
+      // The scene told the server of each round: the level's goal symbol and its rooms with their symbols.
+      const roundLogs = () => logs.filter(l => l.ev === 'round');
+      for (let i = 0; i < 50 && !roundLogs().some(l => l.seed === seed2); i++) await wait(100);
+      const r1 = roundLogs().find(l => l.seed >= 7 && l.seed !== seed2), r2 = roundLogs().find(l => l.seed === seed2);
+      assert.ok(r1 && r2, 'a round report for each round: ' + JSON.stringify(logs.map(l => [l.ev, l.seed])));
+      console.log('log line: doorways ' + JSON.stringify(r2));
+      for (const [l, seed] of [[r1, r1?.seed], [r2, seed2]]) {
+         const L = await run(s => T.G.generate(s).level, seed);
+         assert.equal(l.v, 1); assert.equal(l.xr, false); assert.equal(l.seed, seed);
+         assert.equal(l.goalSymbol, L.goalSymbol); assert.equal(l.goal, L.goal);
+         assert.ok(l.rooms.length > 0 && l.rooms.length <= 9, 'nine rooms at most');
+         assert.deepEqual(l.rooms.map(r => [r[0], r[1]]), L.rooms.map(r => [r.id, r.symbol]), 'the rooms with their symbols');
+         assert.ok(l.rooms.every(r => r.length === 5 && typeof r[4] === 'string'));
+         assert.deepEqual(l.channels.map(c => c.symbol).sort(), [...SYMBOLS].sort());
+         assert.ok(l.channels.every(c => c.uploaded === true && c.same === true), 'each symbol uploaded, on its own channel: ' + JSON.stringify(l.channels));
+         assert.deepEqual([l.mini, l.visited, l.errors, l.won], ['entrance', ['entrance'], 0, false]);
+         assert.ok(l.reachable.includes('entrance') && Array.isArray(l.txtrChannel));
+      }
+      await run(() => doorwaysDebug.newRound(7));   // back to the level of the URL, for what follows
+      await later();
 
       // hold + release over a free cell moves the room there; over nothing it goes back.
       const id = await run(() => T.movable()), was = await run(id => doorwaysDebug.state.at[id], id);
@@ -393,8 +445,6 @@ const twoPlayers = async (browser, url) => {
 
       // The mini in a room the giant holds and turns is still in it after the snap. Every check waits for frames to have run
       // since the event (doorwaysDebug.frames), for the mini's place is only recomputed at a frame.
-      const frames = () => run(() => doorwaysDebug.frames);
-      const later = async () => { const f = await frames(); await until(f => doorwaysDebug.frames > f + 1, f); };
       const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
       // Where the mini should be: the room's settled pose (table frame) applied to its place in the room.
       const expected = (id, local) => run(([id, local]) => { const a = doorwaysDebug.state.at[id]; return T.cg.mTransform(T.R.slotPose(a.slot, a.rot), local); }, [id, local]);
@@ -470,6 +520,11 @@ const twoPlayers = async (browser, url) => {
       await run(() => doorwaysDebug.put(doorwaysDebug.level.goal, [0, 0]));
       assert.equal(await run(() => doorwaysDebug.act('open')), true);
       assert.equal(await run(() => doorwaysDebug.state.won), true, 'the goal chest wins');
+      for (let i = 0; i < 50 && !logs.some(l => l.ev === 'win'); i++) await wait(100);
+      const winLog = logs.find(l => l.ev === 'win');
+      assert.ok(winLog, 'the win is reported');
+      assert.deepEqual([winLog.won, winLog.penalty, winLog.mini, winLog.goalSymbol], [true, 20, winLog.goal, await run(() => doorwaysDebug.level.goalSymbol)]);
+      assert.ok(winLog.visited.includes(winLog.goal) && winLog.opened.length === 2, 'it says where the mini went and what it opened');
       await until(() => /treasure/i.test(doorwaysDebug.panel.message));
       assert.match(await run(() => doorwaysDebug.panel.message), /treasure/i);
       // The wrist panel's picture is redrawn every 7th frame, and a frame takes long here: let it catch up before the shot.

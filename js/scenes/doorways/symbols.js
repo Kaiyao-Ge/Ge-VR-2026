@@ -67,8 +67,21 @@ export function drawSymbol(g2, name, x, y, size) {
    return g2;
 }
 
+// Put the canvas's pixels into the texture that setTxtr has just bound on the unit now, instead of at the first draw of a node
+// that uses it (Clay uploads a canvas texture in drawMesh, while its counter is above 0), and set the counter to 0 so that the
+// first draw does not upload again. Without a GL context (Node) there is nothing to upload to.
+const uploadNow = (unit, canvas) => {
+   const gl = globalThis.window?.clay?.gl, entry = globalThis.window?._canvas_txtr?.[unit];
+   if (!gl || !entry) return;
+   const was = gl.getParameter(gl.ACTIVE_TEXTURE);
+   gl.activeTexture(gl.TEXTURE0 + unit);
+   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+   gl.activeTexture(was);
+   entry.counter = 0;
+};
+
 // Give node the rug texture of the symbol. cache, a Map the caller owns, remembers
-// each symbol's texture unit: the first use paints a static canvas, the rest share it.
+// each symbol's texture unit: the first use paints a static canvas, uploads it and makes its texture, the rest share it.
 // owned, an array the caller owns, gets { channel, texture, canvas } of each new texture so that the
 // caller can release it (see ownTexture).
 export function symbolTexture(node, name, cache, owned) {
@@ -82,6 +95,7 @@ export function symbolTexture(node, name, cache, owned) {
    g2.update();   // paints the one time; the canvas is a still picture from here on
    node.setTxtr(g2.getCanvas(), true);
    ownTexture(owned, node._txtr, g2.getCanvas());
+   uploadNow(node._txtr, g2.getCanvas());
    cache.set(name, node._txtr);
    return node;
 }

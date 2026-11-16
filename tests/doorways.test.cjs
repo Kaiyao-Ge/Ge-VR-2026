@@ -893,5 +893,36 @@ const nearV = (a, b, e = 1e-6) => a.forEach((v, i) => near(v, b[i], e));
       ip.push(2000, at(-1)); near(ip.at(2000 + 99 * 50)[12], 97, 1e-6);   // a late, out-of-order sample is dropped
    });
 
+   await check('reportOf: one compact line of the round: rooms with flags, where the mini can go, the state, the textures', async () => {
+      const P = await load('js/scenes/doorways/report.js');
+      const { level: L } = G.generate(7), state = R.startState(L);
+      const extras = { ev: 'round', xr: false, role: 'giant', paired: null, round: 0, visited: ['entrance'], errors: 0, lastError: '',
+         channels: R.SYMBOLS.map((symbol, i) => ({ symbol, channel: i + 2, uploaded: true, same: i !== 3 })), txtrChannel: [1, 2, 3, 4, 5, 6, 7] };
+      const r = P.reportOf({ level: L, state }, extras);
+      assert.equal(r.v, 1); assert.equal(r.ev, 'round'); assert.equal(r.xr, false); assert.equal(r.paired, null);
+      assert.equal(r.seed, 7); assert.equal(r.goal, L.goal); assert.equal(r.goalSymbol, L.goalSymbol);
+      assert.equal(r.rooms.length, L.rooms.length);
+      L.rooms.forEach((room, i) => {
+         const [id, symbol, slot, rot, flags] = r.rooms[i];
+         assert.deepEqual([id, symbol, slot, rot], [room.id, room.symbol, L.start[room.id].slot, L.start[room.id].rot]);
+         assert.equal(flags, (room.key ? 'k' : '') + (room.switch ? 's' : '') + (room.chest ? 'c' : '') + (room.gate ? 'g' : '') + (room.anchor ? 'a' : ''));
+      });
+      assert.ok(r.rooms.some(x => x[4].includes('c')), 'a chest somewhere');
+      assert.equal(r.mini, 'entrance'); assert.deepEqual(r.visited, ['entrance']);
+      assert.deepEqual(r.reachable, [...R.reachable(L, state)]);
+      assert.deepEqual([r.keys, r.unlocked, r.pressed, r.opened, r.penalty, r.won], [[], [], [], [], 0, false]);
+      assert.deepEqual(r.channels.map(c => c.symbol), R.SYMBOLS);
+      assert.deepEqual(r.channels[3], { symbol: 'tree', channel: 5, uploaded: true, same: false }, 'a channel taken over shows as same: false'); assert.deepEqual(r.txtrChannel, [1, 2, 3, 4, 5, 6, 7]);
+      assert.equal(r.errors, 0); assert.ok(!('lastError' in r), 'no lastError while there is no error');
+      assert.ok(!JSON.stringify(r).includes('\n') && JSON.stringify(r).length < 1500, 'one short line');
+      // A round number of 0 (no session), a thrown frame, the win, a partner: the same shape.
+      const w = P.reportOf({ level: L, state: { ...state, won: true, penalty: 20, mini: L.goal, keys: ['red'] } },
+         { ...extras, ev: 'win', xr: true, paired: 'mini', role: 'mini', round: 3, errors: 2, lastError: 'boom at x', visited: ['entrance', L.goal] });
+      assert.deepEqual([w.ev, w.xr, w.paired, w.round, w.won, w.penalty, w.mini, w.keys, w.errors, w.lastError], ['win', true, 'mini', 3, true, 20, L.goal, ['red'], 2, 'boom at x']);
+      assert.equal(JSON.parse(JSON.stringify(w)).visited[1], L.goal, 'it survives JSON');
+      // The copies are not the state's own.
+      r.keys.push('x'); r.visited.push('y'); assert.deepEqual([state.keys, extras.visited], [[], ['entrance']]);
+   });
+
    console.log(`${passed} doorways checks passed.`);
 })().catch(e => { console.error(e); process.exit(1); });

@@ -17,8 +17,8 @@
 // teleport; grip takes a key; trigger unlocks a gate, presses a switch, opens a chest. Desktop: W/A/S/D walk,
 // Q/E turn, T held aims a teleport, G takes a key, F uses.
 // Controls, both. A (V) switches role when alone, B (N) starts a new round after a win, Y (M) swaps the roles
-// after a win, X with the left controller on the table sets the table; in the headset the first thing is the 12 s
-// depth scan (as HW7).
+// after a win, X with the left controller laid flat on the real table sets the table (it is at the World default
+// until then; there is no room scan here). The mini sees World's solid box room round the table.
 // URL: ?doorwaysSeed=N chooses the level.
 //
 // Everything shared is in the table's frame (world.frame in model coordinates), so the state stays
@@ -34,16 +34,14 @@
 //
 // The parts: doorways/{rules,generate} (the game, pure), rooms, board, symbols (what is drawn), walk
 // (the mini's feet), giant, mini, input, panel, net (the session protocol), pair (its glue to the scene) and
-// bodies (the partner's figure); and the HW7 modules in miniature/.
+// bodies (the partner's figure), report (the line sent to the server log, to diagnose a headset's report); and the
+// HW7 modules in miniature/.
 import * as cg from '../render/core/cg.js';
 import { Mapping, flight, frame, yawOf } from './miniature/mapping.js';
 import { mapRay } from './miniature/rays.js';
 import { World } from './miniature/world.js';
 import { Avatar } from './miniature/avatar.js';
-import { Scanner } from './miniature/scanner.js';
-import { ScanDraw } from './miniature/scandraw.js';
-import { MAX_TRIS, roomMesh, pickTable, tableTop } from './miniature/scanned.js';
-import { ENTRANCE, ROOM, slotPose, slotCentre, startState, movable } from './doorways/rules.js';
+import { ENTRANCE, ROOM, SYMBOLS, slotPose, slotCentre, startState, movable } from './doorways/rules.js';
 import { generate } from './doorways/generate.js';
 import { createRoom } from './doorways/rooms.js';
 import { createBoard } from './doorways/board.js';
@@ -54,8 +52,9 @@ import * as Giant from './doorways/giant.js';
 import { createMini, WALK, TURN, PUSH, CENTRE } from './doorways/mini.js';
 import { Link, CHANNEL, giantPart, miniPart, mapOf } from './doorways/pair.js';
 import { giantFigure, miniFigure } from './doorways/bodies.js';
+import { reportOf } from './doorways/report.js';
 
-const FLIGHT = 1.5, PREVIEW = 3;   // seconds between the views; seconds a finished scan shows before it fades
+const FLIGHT = 1.5, REPORT = 5;   // seconds between the views; seconds between the reports to the server log
 const EYE = 1.6, START_YAW = -Math.PI / 2;   // the mini's eye height (m) when it stands idle; it starts facing east, into the board
 const HINTS = { key: 'grip: take the key', switch: 'trigger: press the switch', chest: 'trigger: open the chest', gate: 'trigger: unlock the gate' };
 
@@ -73,7 +72,8 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
    // The texture channels and GL textures that the panel and the symbols take, to give back on leaving (see cleanup).
    const owned = [];
    const boardNode = worldNode.add(), board = createBoard(boardNode), panel = new Panel(model, owned), mapping = new Mapping();
-   const scanner = new Scanner(window.clay.gl), scanDraw = new ScanDraw(window.clay.gl), textures = new Map();
+   // The texture unit of each symbol, all six made before the first round (see below).
+   const textures = new Map();
    // The partner: the session over the classroom's message queue (alone, or offline, nothing comes of it).
    window.server?.init(CHANNEL, {}, { accumulate: true });
    const link = new Link({ id: () => window.clientID, clients: () => window.clients || [], now: () => performance.now(),
@@ -83,20 +83,46 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
    // The game: the level, the state (the giant's part state.at and `held`; the mini's part the rest and `mini`), all in the table frame.
    const game = { level: null, state: null, held: null, mini: { ref: ENTRANCE, local: [0, 0, 0] } };
    let levelNode = null, nodes = new Map(), roomViews = new Map(), mini = null, clock = {}, fresh = true;
+   // For the report: the rooms the mini has stood in this round, in order; whether the win has been reported; the
+   // exceptions that a frame threw (the frame goes on); when the next report is due.
+   let visited = [], wonSent = false, errors = 0, lastError = '', reportAt = now() + REPORT;
    // The level of the URL's seed the first time, a random one after.
    const urlSeed = Number(new URLSearchParams(location.search).get('doorwaysSeed') ?? NaN);
+   // A rug takes the unit of its symbol's texture, which exists already: a texture made in the middle of a headset session
+   // (its canvas, channel and GL texture) is the suspect of a goal symbol that the player could not find on any rug.
+   const unitOf = symbol => {
+      if (!textures.has(symbol)) throw new Error('no texture for the symbol ' + symbol);
+      return textures.get(symbol);
+   };
+   // The six symbols, each made (canvas, channel, GL texture) and uploaded once on hidden nodes (scale 0, so that none is seen)
+   // before any round starts; Clay would upload a canvas texture only when a node using it is first drawn, and it skips nodes
+   // of scale 0, so symbolTexture uploads it itself. `canvases` keeps each symbol's canvas to tell, in the report, whether
+   // its channel still holds it.
+   const hidden = worldNode.add(), canvases = new Map();
+   hidden.setMatrix(cg.mScale(0));
+   for (const symbol of SYMBOLS) {
+      const taken = owned.length;
+      symbolTexture(hidden.add('square'), symbol, textures, owned);
+      canvases.set(symbol, owned[taken]?.canvas);
+   }
+   // Clay hands out a channel that is in use when all of 1 to 14 are taken (textureManager.js): two textures on one channel
+   // would show one picture on both. Warn once if the panel's or a symbol's channel is another's; the game goes on.
+   const units = [panel.node._txtr, ...textures.values()];
+   if (new Set(units).size !== units.length) console.warn('doorways: texture channels shared by the panel and the symbols', units);
    const startRound = (seed = randomSeed()) => {
       if (levelNode) worldNode.remove(levelNode);
       const { level } = generate(seed);
       levelNode = worldNode.add();
       nodes = new Map(level.rooms.map(r => [r.id, levelNode.add()]));
-      roomViews = new Map(level.rooms.map(r => [r.id, createRoom(nodes.get(r.id), r, { goal: r.id === level.goal, rug: (n, s) => symbolTexture(n, s, textures, owned) })]));
+      roomViews = new Map(level.rooms.map(r => [r.id, createRoom(nodes.get(r.id), r, { goal: r.id === level.goal, rug: (n, s) => n.txtr(unitOf(s)) })]));
       Object.assign(game, { level, state: startState(level), held: null });
       mini = createMini({ rooms: roomViews, board });
       clock = { start: null, end: null };
       // A notice belongs to the round it was shown in: "empty: 20 s lost" must not outlive the level it was about.
       notice = ''; noticeUntil = 0;
       if (head) placeMini(); else fresh = true;   // the first round starts before the first frame, which knows the head
+      visited = [game.state.mini]; wonSent = false;
+      send('round');
    };
 
    // mode is the view I am in or flying to ('player' is the giant's, 'avatar' the mini's), t how far along the flight (0 giant, 1 mini).
@@ -124,13 +150,6 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       world.setTable(p, yaw, size);
       mapping.setStand(cg.mTransform(F(), feet), mapping.stand.yaw + yaw - was);
    };
-   const takeScan = (room, eye, fwd) => {
-      const table = pickTable(room, eye, fwd);
-      world.setScan(roomMesh(room, MAX_TRIS, table && tableTop(room, table.box)));
-      if (table) moveTable(table.p, table.yaw, table.size);
-      return table;
-   };
-   let scanSession = null, scanNote = '', scannedAt = -1e9, scanFound = false;
 
    // Set the room in the giant's hand down; the mini, if it rides in it, goes with it to where it is set (if the
    // mini is mine: a partner's client carries its own mini). The mini's client never sets down: the room is the giant's.
@@ -266,7 +285,7 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
    };
 
    let last = performance.now(), frames = 0, partnerHead = null;   // frames: how many have run, for tests that wait for the next one
-   model.animate(() => {
+   const runFrame = () => {
       const t0 = performance.now(), dt = Math.min(.05, (t0 - last) / 1000);
       last = t0;
       const views = window.clay.views;
@@ -277,27 +296,12 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       const eye = head.slice(12, 15), inp = input.frame(head), hands = inp.hands, left = hands.find(h => h.hand === 'left');
       if (fresh) { fresh = false; placeMini(); }
 
-      // The scan: it starts when I first am in the headset. The giant's view while it runs.
-      const session = xr() ? window.xrFrame?.session : null;
-      if (session && session !== scanSession) {
-         scanSession = session;
-         if (mode === 'avatar') toggle(hands);
-         scanner.start(session, eye, now());
-      }
-      if (session) scanner.update(window.xrFrame, window.xrFrameRefSpace, eye, window.clay.inverseRootMatrix, now());
-      else scanner.cancel();
-      const scanned = scanner.take();
-      if (scanned) { scanFound = !!takeScan(scanned, eye, [-head[8], -head[10]]); scannedAt = now(); }
-      const since = now() - scannedAt;
-      scanNote = scanner.busy ? (scanner.state === 'meshing' ? 'building the room...' : 'look around: scanning ' + scanner.left(now()) + ' s')
-         : scanner.state === 'failed' ? scanner.note : since < PREVIEW + 1 ? (scanFound ? 'room scanned, table found' : 'room scanned, no table: X to set it') : '';
-
-      // The partner, and the role it gives me (after a scan, if I was scanning). Then the buttons: roles (not with a
-      // partner), rounds, the table. A new round, or a swap, comes after a win.
+      // The partner, and the role it gives me. Then the buttons: roles (not with a partner), rounds, the table.
+      // A new round, or a swap, comes after a win.
       network();
-      if (paired && !scanner.busy) setMode(paired === 'mini' ? 'avatar' : 'player', hands);
+      if (paired) setMode(paired === 'mini' ? 'avatar' : 'player', hands);
       const b = inp.buttons, won = game.state.won;
-      if (b.switchRole && !scanner.busy && !paired) toggle(hands);
+      if (b.switchRole && !paired) toggle(hands);
       if (won && (b.swap || b.newRound)) again(b.swap, hands);
       if (b.calibrate && left) moveTable(left.m.slice(12, 15), yawOf(left.m));
 
@@ -337,8 +341,6 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       }
       world.update(xr() ? Math.min(1, t / .3) : 1);
       board.update();
-      const W = worldNode.getGlobalMatrix(), shown = Math.max(world.solid, .6 * Math.min(1, Math.max(0, PREVIEW + 1 - since)));
-      scanDraw.draw(views, W, shown > 0 ? world.scan : null, shown);
 
       // The mini: me through the avatar's eyes in its view; standing still where it is when I am the giant. A room in
       // the giant's hand turns and carries it as it carries the room. With a partner: its avatar from its snapshot when I am
@@ -360,9 +362,36 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       // The wrist panel, above the left controller (on the desktop, low in front).
       const lm = left?.m, fw = head.slice(8, 11), x = head.slice(0, 3), y = head.slice(4, 7);
       const time = paired === 'giant' ? link.view?.time ?? 0 : clockTime();   // the mini's client keeps the clock
-      panel.update({ role: role(), time, penalty: game.state.penalty, won: game.state.won, keys: game.state.keys, message: scanNote || message,
+      panel.update({ role: role(), time, penalty: game.state.penalty, won: game.state.won, keys: game.state.keys, message,
          waiting: link.session.waiting, solo: !paired, goalSymbol: role() === 'giant' ? game.level.goalSymbol : null }, lm ? [lm[12], lm[13] + .1, lm[14]] : eye.map((v, i) => v - fw[i] * .5 - x[i] * .17 - y[i] * .1), eye);
       frames++;
+   };
+
+   // The line for the server log (report.js), to diagnose what a headset's player saw: at each round's start, at the win,
+   // and every REPORT seconds, on the desktop and in the headset. A failed send is of no matter.
+   const send = ev => {
+      const line = reportOf(game, { ev, xr: xr(), role: role(), paired, round: link.session.round, visited, errors, lastError,
+         channels: [...textures].map(([symbol, channel]) => {
+            const entry = window._canvas_txtr?.[channel];
+            return { symbol, channel, uploaded: !!entry && entry.counter <= 0, same: !!entry && entry.src === canvases.get(symbol) };
+         }), txtrChannel: window.txtrChannel });
+      const form = new FormData();
+      form.append('log', 'doorways ' + JSON.stringify(line));
+      fetch('/log', { method: 'POST', body: form }).catch(() => {});
+   };
+   // A frame that throws is counted and goes on (the next one may be fine, and the player keeps a scene); the first of each
+   // message is also shown in the console, so that tests and the desktop's developer see it.
+   model.animate(() => {
+      try { runFrame(); } catch (e) {
+         errors++;
+         const message = e.message + ' ' + (e.stack?.split('\n')[1]?.trim() || '');
+         if (message !== lastError) console.error('doorways:', e);
+         lastError = message;
+      }
+      if (!game.state) return;
+      if (!visited.includes(game.state.mini)) visited.push(game.state.mini);
+      if (game.state.won && !wonSent) { wonSent = true; send('win'); }
+      if (now() >= reportAt) { reportAt = now() + REPORT; send('tick'); }
    });
 
    // Test hooks.
@@ -371,7 +400,7 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
       get net() { const s = link.session; return { paired, live: s.live, waiting: s.waiting, round: s.round, seed: s.seed, giant: s.giant, id: s.id(), peer: s.peer?.id ?? null }; },
       get partner() { return partnerHead; }, get time() { return paired === 'giant' ? link.view?.time ?? 0 : clockTime(); },      get level() { return game.level; }, get state() { return game.state; }, get role() { return role(); }, get t() { return t; },
       get held() { return game.held; }, get mini() { return game.mini; }, get panel() { return panel.state; }, get frame() { return F(); }, get tilt() { return tilt; }, get frames() { return frames; },
-      get textures() { return owned.map(t => t.channel); },
+      get textures() { return owned.map(t => t.channel); }, get symbolChannels() { return Object.fromEntries(textures); }, get panelChannel() { return panel.node._txtr; },
       get scale() { return cg.norm(worldNode.getGlobalMatrix().slice(0, 3)); }, get target() { return target; },
       get feet() { return head && toTable(mapping.stand.p); },
       onFloor() { return !!head && mini.step(game, toTable(mapping.stand.p), 0, 0).room !== null; },
@@ -415,9 +444,6 @@ export const init = async (model, ctx = {}, ctxForever = {}) => {
 
    cleanup = ctxForever.doorwaysCleanup = () => {
       disposers.forEach(d => d());
-      scanner.dispose();
-      scanDraw.dispose();
-      world.setScan(null);
       // Give back each texture channel and GL texture; a channel that another scene has taken since is not ours to free.
       for (const t of owned) {
          if (window._canvas_txtr[t.channel]?.src === t.canvas) {
