@@ -26,6 +26,7 @@ export default () => {
             { name: "minime"     , path: "./minime.js"     , public: true },
             { name: "kbdEvents"  , path: "./kbdEvents.js"  , public: true },
             { name: "kbdEvents2" , path: "./kbdEvents2.js" , public: true },
+            { name: "rails"      , path: "./rails.js"      , public: true },
       ]
    };
 }
