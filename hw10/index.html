@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>AI attends where you don't</title>
+<link rel="stylesheet" href="style.css">
+<!-- Classic scripts; load order: common, story, f1, f2, f3, f5, f7, f9, nav. -->
+<script src="figures/common.js" defer></script>
+<script src="figures/story.js" defer></script>
+<script src="figures/f1-attention.js" defer></script>
+<script src="figures/f2-desk.js" defer></script>
+<script src="figures/f3-street.js" defer></script>
+<script src="figures/f5-table.js" defer></script>
+<script src="figures/f7-minutes.js" defer></script>
+<script src="figures/f9-glasses.js" defer></script>
+<script src="nav.js" defer></script>
+</head>
+<body>
+<nav id="scenebar" aria-label="Scenes">
+  <a href="#scene-1">1 Desk</a>
+  <a href="#scene-2">2 Street</a>
+  <a href="#scene-3">3 Table</a>
+  <a href="#scene-4">4 Record</a>
+</nav>
+<main>
+
+  <section id="top">
+    <h1>AI attends where you don't</h1>
+    <p class="thesis">Where you look, you need no help. The AI attends to the rest.</p>
+    <figure class="fig" id="f1" data-fig="attention">
+      <div class="fig-stage"></div>
+      <figcaption>Drag the gaze point, then switch to what the glasses see.</figcaption>
+    </figure>
+    <p class="under-fig">Only about 2 degrees of your view is sharp (Strasburger et al., 2011). In the gorilla study, half of viewers missed a person in a gorilla suit (Simons &amp; Chabris, 1999).</p>
+  </section>
+
+  <section id="glasses" class="scene">
+    <div class="lines">
+      <h2 class="scene-title">Glasses</h2>
+      <p>The glasses are only senses and a display.</p>
+      <p>A pocket device runs small models. The cloud runs the large model.</p>
+      <p>Ideas from <em>The Way Things Work</em>: lenses, echo ranging, infrared.</p>
+    </div>
+    <figure class="fig" id="f9" data-fig="glasses">
+      <div class="fig-stage"></div>
+      <figcaption>Hover, focus or tap a part of the glasses to see the principle behind it.</figcaption>
+    </figure>
+  </section>
+
+  <section id="story">
+    <h2>The scenario</h2>
+    <p>One afternoon, I plan our VR final project with four classmates. They are Siva, Ben, James and Kaifang. The project is a game called Lighthouse. We all wear the glasses. I assume light glasses, good eye tracking and an AI that reads a scene.</p>
+  </section>
+
+  <section id="scene-1" class="scene">
+    <div class="lines">
+      <h2 class="scene-title">1 Desk</h2>
+      <p class="l-look"><b>I look at:</b> the desk. I ask, "Where's my USB drive?"</p>
+      <p class="l-ai"><b>The AI saw:</b> my USB drive at 22:41. I never looked at it.</p>
+      <p class="l-idea"><b>Idea:</b> what I did not look at is still in memory.</p>
+    </div>
+    <figure class="fig" id="f2" data-fig="desk">
+      <div class="fig-stage"></div>
+      <figcaption>Ask for an object: an edge cue comes first, then the highlight.</figcaption>
+    </figure>
+  </section>
+
+  <section id="scene-2" class="scene">
+    <div class="lines">
+      <h2 class="scene-title">2 Street</h2>
+      <p class="l-look"><b>I look at:</b> my phone.</p>
+      <p class="l-ai"><b>The AI sees:</b> a bicycle coming from behind.</p>
+      <p class="l-idea"><b>Idea:</b> the warning grows step by step. Glow, then sound, then text, then a tap. Only real danger may draw in the middle of my view. It works with the network down.</p>
+    </div>
+    <figure class="fig" id="f3" data-fig="street">
+      <div class="fig-stage"></div>
+      <figcaption>Drag the bicycle to light a warning step.</figcaption>
+    </figure>
+    <figure class="photo" id="street-photo">
+      <img src="img/forza-navigation.jpg" width="1600" height="652" loading="lazy"
+           alt="A first-person view from a car on a desert track; light blue arrows painted on the road show the route ahead.">
+      <figcaption>In-world navigation: Forza Horizon 5 draws the route as arrows on the road (screenshot from Forza Horizon 5, Playground Games, 2021).</figcaption>
+    </figure>
+  </section>
+
+  <section id="scene-3" class="scene">
+    <div class="lines">
+      <h2 class="scene-title">3 Table</h2>
+      <p class="l-look"><b>I look at:</b> my laptop.</p>
+      <p class="l-ai"><b>The AI hears:</b> Kaifang asks, "Hand tracking is your part, right?"</p>
+      <p class="l-idea"><b>Idea:</b> a cue shows the sentence at the edge. If I look at Kaifang, the AI stays silent.</p>
+    </div>
+    <figure class="fig" id="f5" data-fig="table">
+      <div class="fig-stage"></div>
+      <figcaption>Press Play: when Kaifang says "your part", an edge cue shows the sentence.</figcaption>
+    </figure>
+  </section>
+
+  <section id="scene-4" class="scene">
+    <div class="lines">
+      <span id="scene-5" aria-hidden="true"></span>
+      <h2 class="scene-title">4 Record</h2>
+      <p class="l-look"><b>I look at:</b> Siva, my laptop, Kaifang. Never the whole board.</p>
+      <p class="l-ai"><b>The AI reads:</b> the board and the talk, from the best view. It keeps every version.</p>
+      <p class="l-idea"><b>Idea:</b> the minutes list owners and dates. Each item links to its source. "What you missed" is only mine.</p>
+    </div>
+    <figure class="fig" id="f7" data-fig="minutes">
+      <div class="fig-stage"></div>
+      <figcaption>Click an item to see its sources, or switch to what you missed.</figcaption>
+    </figure>
+  </section>
+
+  <section id="notes">
+    <h2>Notes</h2>
+    <ul>
+      <li>Simons, D. J., &amp; Chabris, C. F. (1999). Gorillas in our midst: Sustained inattentional blindness for dynamic events. <em>Perception</em>, 28(9), 1059–1074.</li>
+      <li>Strasburger, H., Rentschler, I., &amp; Jüttner, M. (2011). Peripheral vision and pattern recognition: A review. <em>Journal of Vision</em>, 11(5):13.</li>
+      <li><em>The Way Things Work</em> (1967). New York: Simon and Schuster. <a href="https://archive.org/details/waythingswork0000vari_j3y5/">https://archive.org/details/waythingswork0000vari_j3y5/</a></li>
+      <li><em>Forza Horizon 5</em> (2021). Playground Games; Xbox Game Studios. The scene 2 screenshot comes from this game.</li>
+    </ul>
+  </section>
+
+</main>
+</body>
+</html>

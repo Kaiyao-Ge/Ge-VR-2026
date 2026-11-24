@@ -1,0 +1,332 @@
+/* HW10: an illustrated essay. System fonts only, no external files. */
+
+/* Colour tokens. Figures take every colour from these, through the classes below, never as a literal. */
+:root {
+  color-scheme: light dark;
+  --bg: #fbfaf7;
+  --ink: #1d1d1f;
+  --muted: #5b6066;
+  --line: #d2cfc7;
+  --accent: #1a5fb4;
+  --warn: #9a5a00;
+  --danger: #b3261e;
+  --fig-bg: #f1eee7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171a;
+    --ink: #ecebe8;
+    --muted: #a6aab0;
+    --line: #3b4046;
+    --accent: #7db1f5;
+    --warn: #e3ab4f;
+    --danger: #f28b82;
+    --fig-bg: #1e2125;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  padding: 0 1rem 4rem;
+  background: var(--bg);
+  color: var(--ink);
+  font: 1.25rem/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-wrap: break-word;
+}
+
+/* The type scale at a 1280 px window: body 20, h1 44, h2 30, scene titles 26, figure captions and buttons 16.
+   Every heading is larger than the body text. */
+main { max-width: 72rem; margin: 0 auto; }
+h1, h2 { line-height: 1.2; font-weight: 700; }
+h1 { font-size: clamp(2rem, 6vw, 2.75rem); margin: 1.25rem 0 .5rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.875rem; margin: 0 0 1rem; }
+h2.scene-title { font-size: 1.625rem; margin: 0 0 1rem; }
+p { margin: 0 0 1em; }
+ul { margin: 0 0 1em; padding-left: 1.4em; }
+main li + li { margin-top: .4em; }
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+/* A jump to a section lands its title below the sticky bar. */
+[id] { scroll-margin-top: 4.5rem; }
+
+/* Sections after the hero: a thin rule and room above each. */
+main > section { margin-top: 3.5rem; padding-top: 2rem; border-top: 1px solid var(--line); }
+main > section#top { margin-top: 0; padding-top: 0; border-top: 0; }
+
+#story > p { max-width: 46rem; }
+
+/* The hero: the title, the one idea and F1 fit the first screen (1280 x 847). */
+.thesis { margin: 0 0 .75rem; font-size: 1.25rem; line-height: 1.4; font-weight: 700; padding-left: .9rem; border-left: 4px solid var(--accent); }
+.under-fig { margin: .9rem 0 0; max-width: 46rem; }
+
+/* A scene (and the glasses section): the lines in a column of about 300 px on the left, the figure on the right.
+   Stacked on a narrow screen: the lines, then the figure. */
+.scene { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem 2rem; align-items: start; }
+@media (min-width: 56rem) {
+  .scene { grid-template-columns: 300px minmax(0, 1fr); }
+}
+.lines p { margin: 0 0 .9rem; padding-left: .8rem; border-left: 4px solid var(--accent); line-height: 1.4; }   /* one colour for every line: the bar carries no meaning */
+.lines p b { font-weight: 700; }
+.lines p:last-child { margin-bottom: 0; }
+
+/* The bar: four scenes. Sticky at the top; one line down to 375 px; nav.js marks the scene being read. */
+#scenebar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  gap: .25rem;
+  padding: .3rem .5rem;
+  margin: 0 -1rem;
+  background: var(--bg);
+  border-bottom: 2px solid var(--ink);
+}
+#scenebar a {
+  flex: 1 1 auto;
+  max-width: 10rem;
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 .35rem;
+  white-space: nowrap;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink);
+  border: 2px solid transparent;
+  border-radius: 8px;
+}
+@media (max-width: 30rem) {
+  #scenebar { gap: .15rem; padding: .3rem .25rem; }
+  #scenebar a { padding: 0 .2rem; }
+}
+#scenebar a:hover { border-color: var(--accent); }
+#scenebar a[aria-current="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+
+/* Figures fill their column. */
+.fig {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: .75rem;
+  border: 1px solid var(--line);
+  border-radius: .75rem;
+  background: var(--fig-bg);
+}
+.fig-stage:empty { min-height: 18rem; }
+/* A figure's drawing is sized so that its SVG text shows at about 22 px at 1280: its width is --dw (the viewBox width times 22 over
+   the font size in units). The stage and the caption keep that width and sit in the middle of the box; a narrower screen just fills. */
+.fig-stage, .fig > figcaption { max-width: var(--dw, none); margin-left: auto; margin-right: auto; }
+#f2, #f3 { --dw: 660px; }                     /* viewBox 720, text 24 units */
+#f5, #f9 { --dw: 670px; }      /* viewBox 640, text 21 units */
+.fig-stage svg { display: block; width: 100%; height: auto; }
+.fig figcaption { margin-top: .75rem; font-size: 1rem; line-height: 1.45; color: var(--muted); }
+.fig[data-error]::after {
+  content: "This figure could not be drawn. The caption above still says what it shows.";
+  display: block;
+  margin-top: .5rem;
+  color: var(--danger);
+  font-size: 1rem;
+}
+
+/* The two-column convention: a figure puts its drawing in .fig-draw and its controls, status line and panels in .fig-side, both
+   children of .fig-stage. Wide: the drawing on the left (--draw-w, set by the figure), the side column on the right, tops
+   aligned. Narrow: the side under the drawing. A figure without the wrappers is unchanged. */
+.fig-draw { min-width: 0; }
+.fig-draw svg { display: block; width: 100%; height: auto; }
+.fig-side { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: .75rem; margin-top: .75rem; }
+.fig-side > * { max-width: 100%; }
+@media (min-width: 58rem) {
+  .fig-stage:has(> .fig-draw) { display: grid; grid-template-columns: minmax(0, var(--draw-w, 30rem)) minmax(0, 1fr); gap: 1rem 1.5rem; align-items: start; }
+  .fig-stage:has(> .fig-draw) > .fig-side { margin-top: 0; }
+}
+
+/* Buttons in figures: 16 px text, at least 44 px tall, ink text and a 2 px ink border; the selected one solid accent; the focus
+   ring is the shared one above. */
+.fig button {
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.25;
+  min-height: 2.75rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  padding: .4rem .9rem;
+  cursor: pointer;
+}
+.fig button:hover { border-color: var(--accent); }
+.fig button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.fig button[aria-pressed="true"] * { color: inherit; }
+
+/* Colour classes for the inside of a figure's SVG. The markup names a class, never a colour. */
+.fill-ink { fill: var(--ink); }       .stroke-ink { stroke: var(--ink); }
+.fill-muted { fill: var(--muted); }   .stroke-muted { stroke: var(--muted); }
+.fill-line { fill: var(--line); }     .stroke-line { stroke: var(--line); }
+.fill-accent { fill: var(--accent); } .stroke-accent { stroke: var(--accent); }
+.fill-warn { fill: var(--warn); }     .stroke-warn { stroke: var(--warn); }
+.fill-danger { fill: var(--danger); } .stroke-danger { stroke: var(--danger); }
+.fill-bg { fill: var(--bg); }         .stroke-bg { stroke: var(--bg); }
+.fill-fig { fill: var(--fig-bg); }    .stroke-fig { stroke: var(--fig-bg); }
+.fill-none { fill: none; }            .stroke-none { stroke: none; }
+/* Default ink for everything drawn in a figure, set on the svg so that text inherits it: a class above, or a fill attribute,
+   on a shape or text still wins. */
+.fig svg { color: var(--ink); fill: currentColor; }
+:where(.fig svg text) { font-family: inherit; }
+
+/* F1, the attention field. */
+.f1-line { stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.f1-stop { stop-color: var(--fig-bg); }       /* the gradient stops (the masks only use their opacity; the pale overlay uses the colour) */
+.f1-mask { mask-type: alpha; }
+.f1-pale { pointer-events: none; }
+#f1[data-state="glasses"] .f1-layers, #f1[data-state="glasses"] .f1-pale { display: none; }
+.f1-mark { fill: none; stroke: none; }
+.f1-mark.found { stroke: var(--accent); stroke-width: 4; stroke-dasharray: 10 6; }
+.gaze { cursor: grab; touch-action: none; outline: none; }
+.gaze:active { cursor: grabbing; }
+.f1-hit { fill: none; stroke: none; pointer-events: all; }
+.gaze:focus-visible .f1-hit { stroke: var(--accent); stroke-width: 3; }
+.f1-spot { stroke-width: 1.5; }
+.f1-clear { stroke-width: 1.5; stroke-dasharray: 5 7; opacity: .55; }
+.f1-reticle { stroke-width: 3; stroke-linecap: round; }
+.f1-switch { display: flex; flex-wrap: wrap; gap: .5rem; }
+.f1-note { margin: .6rem 0 0; font-size: 1rem; line-height: 1.4; color: var(--muted); }
+.f1-note:empty { display: none; }
+/* The hero: F1 is only as wide as its drawing (680 px of drawing, so its text shows at 22 px at 1280), the two buttons are a row
+   above the drawing, and on a wide screen the hero line sits to the right of the figure, centred on it; below that width
+   everything stacks. The DOM order stays: h1, thesis, figure, line. */
+#f1 { max-width: 706px; }
+#f1 .fig-stage { display: block; }
+#f1 .fig-side { margin: 0 0 .75rem; }
+@media (min-width: 68rem) {
+  #top { display: grid; grid-template-columns: 706px minmax(0, 1fr); column-gap: 2.5rem; align-items: center; }
+  #top > h1, #top > .thesis { grid-column: 1 / -1; }
+  #top > .thesis { justify-self: start; }
+  #top > .under-fig { margin: 0; align-self: center; max-width: 24rem; }
+}
+
+/* F2, the desk. */
+.f2-line { stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.f2-camera { opacity: .12; stroke: none; }
+.f2-trail-line { stroke-width: 3; stroke-dasharray: 9 7; stroke-linecap: round; stroke-linejoin: round; }
+.f2-view { transform-origin: 235px 392px; transition: transform .7s ease; }
+.f2-view-cone { fill: none; stroke-width: 2; stroke-dasharray: 3 5; }
+.f2-stop { stop-color: var(--accent); }
+.f2-glow { opacity: 0; transition: opacity .25s; pointer-events: none; }
+.f2-glow.on { opacity: 1; animation: f2-pulse 1s ease-in-out infinite; }
+.f2-ring, .f2-frame-ring { stroke-width: 4; opacity: 0; transition: opacity .3s; pointer-events: none; }
+.f2-found .f2-ring, .f2-found .f2-frame-ring { opacity: 1; }
+.f2-found .f2-ring { animation: f2-ring 1.4s ease-in-out infinite; }
+.f2-hide { display: none; }
+.f2-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-top: .5rem; }
+.f2-note { margin: 0; flex: 1 1 100%; font-size: 1rem; line-height: 1.4; color: var(--muted); }
+@keyframes f2-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+@keyframes f2-ring { 0%, 100% { stroke-width: 4; } 50% { stroke-width: 7; } }
+
+/* F3, the street. */
+.f3-line { stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.f3-camera { opacity: .12; stroke: none; }
+.f3-human { opacity: .08; stroke: none; }
+.f3-view-edge { stroke-width: 2; stroke-dasharray: 3 5; }
+.f3-lane { stroke-width: 16; stroke-linecap: round; opacity: .6; }
+.f3-lane-dash { stroke-width: 2; stroke-dasharray: 8 8; }
+.f3-route { stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 2 7; }
+.f3-route-head { stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.f3-halo { paint-order: stroke; stroke: var(--fig-bg); stroke-width: 6px; stroke-linejoin: round; }
+.f3-stop { stop-color: var(--accent); }
+.f3-hit { fill: none; stroke: none; pointer-events: all; cursor: grab; }
+.f3-bike { touch-action: none; }
+.f3-sound, .f3-haptic { opacity: 0; transition: opacity .2s; pointer-events: none; }
+.f3-sound.on, .f3-haptic.on { opacity: 1; }
+.f3-cue { opacity: 0; transition: opacity .2s; pointer-events: none; }
+.f3-cue.on { opacity: 1; }
+.f3-overlay { stroke-width: 3; }
+.f3-step-text { transition: fill .2s; }
+.f3-step.below .f3-dot { fill: var(--line); }
+.f3-step.lit .f3-dot { fill: var(--accent); stroke: var(--accent); }
+.f3-step.lit .f3-step-text { fill: var(--ink); }
+.f3-step.f3-top.lit .f3-dot { fill: var(--danger); stroke: var(--danger); }
+.f3-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-top: .5rem; }
+.f3-slider { display: flex; align-items: center; gap: .6rem; flex: 1 1 14rem; }
+.f3-slider input { flex: 1; min-width: 6rem; accent-color: var(--accent); }
+.f3-readout { margin: 0; flex: 1 1 100%; font-size: 1rem; line-height: 1.4; color: var(--muted); }
+.f3-readout strong { color: var(--ink); }
+
+/* F5, the table. */
+.f5-line { stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.f5-wall { stroke-width: 8; stroke-linecap: butt; }
+.f5-view { opacity: .08; stroke: none; }
+.f5-view-edge { stroke-width: 2; stroke-dasharray: 3 5; }
+.f5-sound { pointer-events: none; }
+.f5-stop { stop-color: var(--accent); }
+.f5-cue { opacity: 0; transition: opacity .25s; pointer-events: none; }
+.f5-cue.on { opacity: 1; }
+.f5-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-top: .5rem; }
+.f5-controls button:disabled { opacity: .45; cursor: default; }
+.f5-readout { margin: 0; flex: 1 1 100%; font-size: 1rem; line-height: 1.4; color: var(--muted); }
+
+/* F7, the minutes. */
+.f7-doc { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: .6rem .8rem .4rem; }
+.f7-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem 1rem; }
+.f7-views { display: flex; flex-wrap: wrap; gap: .5rem; }
+.f7-head { margin: .6rem 0 .2rem; font-size: 1rem; font-weight: 700; text-transform: none; color: var(--muted); }
+.f7-list { list-style: none; margin: 0; padding: 0; }
+.f7-list li + li { margin-top: .3rem; }
+.fig .f7-item { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 .8rem; width: 100%; text-align: left; line-height: 1.3; padding: .3rem .6rem; align-items: center; align-content: center; }
+.f7-meta { color: var(--muted); font-size: 1rem; }
+.fig-stage:has(> .f7-doc) { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem 1rem; align-items: start; }
+.f7-readout { grid-column: 1 / -1; }
+.f7-svg { display: block; width: 100%; max-width: 400px; height: auto; margin: 0 auto; }
+@media (min-width: 58rem) {      /* the evidence card is to the right of the list, with its top level with the list's top */
+  .fig-stage:has(> .f7-doc) { grid-template-columns: minmax(0, 1fr) 400px; }
+  .f7-svg { margin: 0; }
+}
+.f7-frame { stroke-width: 2; }
+.f7-block { opacity: 0; transition: opacity .25s; }
+.f7-block.on { opacity: 1; }
+.f7-name { font-weight: 700; }
+.f7-erased { text-decoration: line-through; text-decoration-thickness: 2px; }
+.f7-bar-mark { stroke-width: 4; stroke-linecap: round; }
+.f7-readout { margin: 0; font-size: 1rem; line-height: 1.4; color: var(--muted); }
+
+/* F9, the glasses taken apart. */
+.f9-line { stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.f9-guide { stroke-width: 2; stroke-dasharray: 3 6; stroke-linecap: round; }
+.f9-glint, .f9-echo, .f9-heat { stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.f9-part { cursor: pointer; outline: none; }
+.f9-hit { pointer-events: all; }
+.f9-part:hover .f9-line, .f9-part.sel .f9-line, .f9-part.sel .f9-echo, .f9-part.sel .f9-heat { stroke: var(--accent); }
+.f9-part.sel .f9-label { fill: var(--accent); font-weight: 700; }
+.f9-part:focus-visible .f9-hit { stroke: var(--accent); stroke-width: 3; }
+.f9-panel { margin: .6rem 0 0; padding: .6rem .8rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--bg); font-size: 1rem; line-height: 1.45; }
+.f9-panel p { margin: 0 0 .4em; }
+.f9-panel p:last-child { margin-bottom: 0; }
+.f9-name { font-size: 1.15rem; font-weight: 700; }
+
+/* Motion: smooth scrolling and transitions only for readers who have not asked for less. */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visually hidden, still read by a screen reader (figure narration the picture already shows). */
+.sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* A photo inside a scene: under the figure, in the figure's column; same frame and caption as the figures. */
+.scene > .photo { margin: 0; }
+@media (min-width: 56rem) { .scene > .photo { grid-column: 2; } }
+.photo img { display: block; width: 100%; height: auto; border: 2px solid var(--ink); border-radius: 8px; }
+.photo figcaption { margin-top: .5rem; font-size: 1rem; line-height: 1.4; color: var(--muted); }
